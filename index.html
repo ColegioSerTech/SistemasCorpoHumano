@@ -1,0 +1,2551 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistemas em Ação: A Máquina Humana</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --sys: #f97316; }
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f0fdf4;
+            overscroll-behavior: none; /* Evita scroll ao arrastar no celular */
+        }
+
+        /* Área do Corpo — silhueta como base (proporção da imagem 688x1080) */
+        .body-container {
+            position: relative;
+            width: min(344px, 86vw, calc((100dvh - 170px) * 0.637));
+            min-width: 210px;
+            aspect-ratio: 688 / 1080;
+            margin: 0 auto;
+            background-image: url('6.png');
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            flex: none;
+        }
+        @media (max-width: 767px) {
+            #body-map { width: min(300px, 80vw, calc((100dvh - 360px) * 0.637)); }
+            #m-body { width: min(260px, 70vw); }
+            .m-token { width: 28px; height: 28px; }
+            .m-token .blob { font-size: .9rem; border-width: 2px; }
+            .m-marker { width: 18px; height: 18px; font-size: .6rem; }
+        }
+
+        /* Zonas de largada (Drop Zones) */
+        .dropzone {
+            position: absolute;
+            border: 2px dashed #94a3b8;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: #64748b;
+            text-align: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        .dropzone.active { animation: pulse-border 1.5s infinite; }
+        .dropzone.hovered {
+            background-color: rgba(34, 197, 94, 0.2);
+            border-color: #22c55e;
+            transform: scale(1.05);
+        }
+
+        /* Órgãos posicionados */
+        .placed-organ {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease, filter 0.5s ease, transform 1.4s ease-in-out;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .placed-organ img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.3));
+            pointer-events: none;
+        }
+        .placed-organ.previous-system {
+            opacity: 0.3;
+            filter: grayscale(50%);
+            z-index: 1 !important;
+        }
+        .placed-organ.inhale-body { transform: scale(1.08); }
+
+        /* Inventário de Órgãos */
+        .organ-item {
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            transition: transform 0.2s;
+        }
+        .organ-item:active { cursor: grabbing; transform: scale(0.95); }
+
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 0.9;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+        }
+
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+        }
+        .error-shake { animation: shake 0.4s ease-in-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        .fade-up { animation: fadeUp 0.4s ease-out both; }
+
+        /* Cartões genéricos */
+        .q-card {
+            background: #fff;
+            border-radius: 1.75rem;
+            box-shadow: 0 8px 24px -12px rgba(0,0,0,0.15);
+            border: 1px solid #ede9fe;
+        }
+
+        /* --- MISSÕES (trabalho de cada sistema) --- */
+        #mission-screen { background-color: #fff7ed; }
+        .m-path { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 25; overflow: visible; }
+        .m-marker {
+            position: absolute; width: 22px; height: 22px; transform: translate(-50%, -50%);
+            border-radius: 9999px; background: #fff; border: 2px solid #94a3b8; color: #475569;
+            font-size: 0.7rem; font-weight: 900; display: flex; align-items: center; justify-content: center;
+            z-index: 30; box-shadow: 0 2px 6px rgba(0,0,0,.2); transition: all .3s;
+        }
+        .m-marker.current { background: var(--sys); border-color: #fff; color: #fff; animation: ring 1.4s infinite; }
+        .m-marker.done { background: var(--sys); border-color: #fff; color: #fff; opacity: .85; }
+        @keyframes ring {
+            0% { box-shadow: 0 0 0 0 rgba(0,0,0,.35); }
+            70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+        }
+        .m-token {
+            position: absolute; width: 38px; height: 38px; transform: translate(-50%, -50%);
+            transition: left .7s ease-in-out, top .7s ease-in-out; z-index: 40; pointer-events: none;
+        }
+        .m-token .blob {
+            width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,.35), 0 0 0 4px rgba(255,255,255,.35);
+            display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+            transition: background-color .6s, border-radius .6s; animation: tokenFloat 1.6s ease-in-out infinite;
+        }
+        .m-token .lbl {
+            position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;
+            white-space: nowrap; background: rgba(15,23,42,.82); color: #fff; font-size: .65rem;
+            font-weight: 800; padding: 2px 8px; border-radius: 9999px;
+        }
+        .m-token.bump .blob { animation: tokenBump .35s ease-out; }
+        @keyframes tokenFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        @keyframes tokenBump { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+        .m-task-box { border: 2px solid; border-radius: 1.25rem; padding: 1rem; }
+        .m-act {
+            display: flex; align-items: center; gap: .6rem; text-align: left; background: #fff;
+            border: 2px solid #e2e8f0; border-radius: .9rem; padding: .6rem .8rem; font-weight: 700;
+            color: #334155; font-size: .9rem; transition: all .15s; box-shadow: 0 2px 4px -2px rgba(0,0,0,.08);
+        }
+        .m-act:hover:not(:disabled) { border-color: var(--sys); transform: translateY(-1px); }
+        .m-act .ic { font-size: 1.3rem; width: 1.8rem; text-align: center; flex: none; }
+        .m-act.ok { background: #dcfce7; border-color: #22c55e; color: #166534; }
+        .m-act.bad { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+        .m-act:disabled { cursor: default; }
+        .m-act:disabled:not(.ok) { opacity: .5; }
+        .swatch { width: 1.8rem; height: 1.8rem; border-radius: .5rem; border: 2px solid rgba(0,0,0,.12); flex: none; }
+        .m-feedback { min-height: 1.25rem; margin-top: .6rem; font-weight: 700; font-size: .88rem; line-height: 1.35; }
+        .m-feedback.good { color: #15803d; }
+        .m-feedback.bad { color: #b91c1c; }
+        .m-feedback.info { color: #475569; }
+        .m-match-row { background: #fff; border: 2px solid #e2e8f0; border-radius: .9rem; padding: .55rem .7rem; transition: all .2s; }
+        .m-match-row.solved { border-color: #22c55e; background: #f0fdf4; }
+        .m-opt {
+            border: 2px solid #e2e8f0; border-radius: 9999px; padding: .3rem .75rem; font-size: .8rem;
+            font-weight: 700; background: #f8fafc; color: #475569; transition: all .15s;
+        }
+        .m-opt:hover:not(:disabled) { border-color: var(--sys); }
+        .m-opt.ok { background: #22c55e; border-color: #22c55e; color: #fff; }
+        .m-opt.bad { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+
+        /* Tarefa: respiração (diafragma) */
+        .breath-scene {
+            position: relative; height: 200px; background: linear-gradient(#f0f9ff, #e0f2fe);
+            border-radius: 1rem; overflow: hidden; display: flex; justify-content: center; padding-top: 10px;
+        }
+        .br-lungs { height: 130px; transition: transform 1.4s ease-in-out; transform-origin: center 60%; }
+        .br-diaphragm { position: absolute; left: 8%; width: 84%; bottom: 26px; height: 40px; transition: transform 1.4s ease-in-out; transform-origin: center bottom; }
+        .breath-scene.inhale .br-lungs { transform: scale(1.16); }
+        .breath-scene.inhale .br-diaphragm { transform: translateY(14px) scaleY(.3); }
+        .br-tag { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: .72rem; font-weight: 800; color: #be123c; }
+        .br-air { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: .8rem; font-weight: 800; color: #0369a1; background: rgba(255,255,255,.8); padding: 1px 8px; border-radius: 9999px; }
+        .br-btn { user-select: none; touch-action: none; }
+        .br-btn.holding { transform: scale(.97); filter: brightness(.92); }
+
+        /* Tarefa: bombear (coração) */
+        .pump-heart { width: 150px; height: 170px; margin: 0 auto; display: block; position: relative; cursor: pointer; }
+        .pump-heart img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 12px rgba(0,0,0,.25)); pointer-events: none; }
+        .pump-heart.beat img { animation: oneBeat .35s ease-out; }
+        @keyframes oneBeat { 0% { transform: scale(1); } 35% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        .pump-drop { position: absolute; width: 11px; height: 11px; border-radius: 9999px; pointer-events: none; }
+
+        /* Tarefa: filtrar (néfron) */
+        .f-item {
+            display: flex; align-items: center; gap: .8rem; justify-content: center; background: #fff;
+            border: 2px dashed var(--sys); border-radius: 1rem; padding: .9rem; font-weight: 900; font-size: 1.1rem; color: #334155;
+        }
+        .f-bin { background: #fff; border: 2px solid #e2e8f0; border-radius: 1rem; padding: .5rem; min-height: 74px; }
+        .f-chip { display: inline-flex; gap: .25rem; font-size: .72rem; font-weight: 700; background: #f1f5f9; border-radius: 9999px; padding: .15rem .5rem; margin: .15rem; animation: popIn .3s; }
+
+        /* Barras de acompanhamento */
+        .trk-bar { height: .55rem; background: #e2e8f0; border-radius: 9999px; overflow: hidden; }
+        .trk-fill { height: 100%; border-radius: 9999px; transition: width .9s ease; }
+
+        /* --- FASE 2: QUIZ --- */
+        #quiz-screen { background-color: #f5f3ff; }
+        .q-opt {
+            background: #fff; border: 2px solid #e2e8f0; border-radius: 1rem; padding: 0.9rem 1rem;
+            font-weight: 700; color: #475569; cursor: pointer; text-align: left; transition: all 0.15s ease;
+            box-shadow: 0 3px 6px -2px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 0.7rem; font-size: 1rem;
+        }
+        .q-opt:hover:not(:disabled) { border-color: #a855f7; background: #faf5ff; transform: translateY(-2px); }
+        .q-opt:disabled { cursor: default; }
+        .q-opt .mark {
+            width: 1.7rem; height: 1.7rem; flex: none; border-radius: 9999px; background: #f1f5f9;
+            display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: #94a3b8;
+        }
+        .q-opt.correct { background: #dcfce7; border-color: #22c55e; color: #166534; }
+        .q-opt.correct .mark { background: #22c55e; color: #fff; }
+        .q-opt.incorrect { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+        .q-opt.incorrect .mark { background: #ef4444; color: #fff; }
+        .q-star { font-size: 2.5rem; filter: grayscale(1) opacity(0.35); animation: popIn 0.4s backwards; }
+        .q-star.on { filter: none; }
+
+        /* --- FASE 3: O CORPO EM AÇÃO --- */
+        #phase3-screen { background-color: #eff6ff; }
+        @keyframes p3beat { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.14); } 40% { transform: scale(1.0); } 55% { transform: scale(1.08); } }
+        @keyframes p3breathe { 0%, 100% { transform: scale(0.97); } 50% { transform: scale(1.09); } }
+        @keyframes p3digest { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.06, 0.93); } }
+        @keyframes p3filter { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+        .anim-beat    { animation: p3beat 0.95s ease-in-out infinite; transform-origin: center; }
+        .anim-breathe { animation: p3breathe 3.4s ease-in-out infinite; transform-origin: center 45%; }
+        .anim-digest  { animation: p3digest 1.9s ease-in-out infinite; transform-origin: center; }
+        .anim-filter  { animation: p3filter 2.4s ease-in-out infinite; transform-origin: center; }
+        .p3-particle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 20; }
+        .sys-btn { transition: all 0.15s ease; cursor: pointer; }
+        .sys-btn.active { transform: translateY(-2px) scale(1.03); box-shadow: 0 8px 16px -6px rgba(0,0,0,0.25); }
+        .p3-list li { margin-left: 1.1rem; list-style: disc; margin-top: .3rem; }
+
+        /* --- FASE 4: JOGO DA MEMÓRIA --- */
+        #phase4-screen { background-color: #eef2ff; }
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        .card-inner { transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); }
+        .memory-card.flip .card-inner { transform: rotateY(180deg); }
+        @media (hover: hover) {
+            .memory-card:hover:not(.flip):not(.matched) .card-inner { transform: scale(1.04); transition: transform 0.3s ease; }
+        }
+        .card-back-pattern {
+            background-color: #6366f1;
+            background-image: radial-gradient(#a5b4fc 2px, transparent 2px);
+            background-size: 16px 16px;
+        }
+        @keyframes memPop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .mem-pop { animation: memPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; opacity: 0; }
+        @keyframes memMatch { 0%, 100% { transform: rotateY(180deg) scale(1); } 50% { transform: rotateY(180deg) scale(1.1); } }
+        .memory-card.matched .card-inner { animation: memMatch 0.5s ease-in-out; }
+        .memory-card.matched .card-front { border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.35); }
+
+        /* Ferramentas flutuantes */
+        .tool-btn {
+            position: relative; width: 46px; height: 46px; border-radius: 9999px; background: #fff;
+            box-shadow: 0 6px 14px -4px rgba(0,0,0,.25); font-size: 1.3rem; display: flex;
+            align-items: center; justify-content: center; border: 2px solid #e2e8f0; transition: transform .15s;
+        }
+        .tool-btn:hover { transform: scale(1.08); }
+        .tool-btn .badge {
+            position: absolute; top: -4px; right: -4px; background: #ef4444; color: #fff; font-size: .65rem;
+            font-weight: 900; border-radius: 9999px; min-width: 18px; height: 18px; padding: 0 4px;
+            display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden text-slate-800">
+
+    <!-- Tela Inicial -->
+    <div id="start-screen" class="absolute inset-0 z-50 bg-green-50 flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-green-700 mb-2 tracking-tight">Sistemas em Ação</h1>
+        <h2 class="text-2xl text-green-600 mb-5 font-bold">A Máquina Humana 🧬</h2>
+        <p class="text-lg text-slate-600 max-w-xl mb-5">
+            Monte o corpo humano sistema por sistema e depois <b>faça cada um trabalhar</b>: guie o alimento, o ar, o sangue e a urina pelo caminho certo e descubra como tudo funciona em conjunto!
+        </p>
+        <div class="flex flex-wrap justify-center gap-2 mb-5">
+            <span class="bg-orange-100 text-orange-700 font-extrabold px-3 py-1.5 rounded-full text-sm">🍔 Digestório</span>
+            <span class="bg-sky-100 text-sky-700 font-extrabold px-3 py-1.5 rounded-full text-sm">💨 Respiratório</span>
+            <span class="bg-red-100 text-red-700 font-extrabold px-3 py-1.5 rounded-full text-sm">🩸 Circulatório</span>
+            <span class="bg-yellow-100 text-yellow-700 font-extrabold px-3 py-1.5 rounded-full text-sm">💧 Excretor</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 max-w-2xl w-full mb-6 text-left">
+            <div class="bg-white rounded-2xl p-3 shadow-sm border border-green-100"><div class="text-xs font-extrabold text-green-600 uppercase">Fase 1</div><div class="font-bold text-sm text-slate-700">Montar e fazer funcionar</div></div>
+            <div class="bg-white rounded-2xl p-3 shadow-sm border border-purple-100"><div class="text-xs font-extrabold text-purple-600 uppercase">Fase 2</div><div class="font-bold text-sm text-slate-700">Desafio do Conhecimento</div></div>
+            <div class="bg-white rounded-2xl p-3 shadow-sm border border-blue-100"><div class="text-xs font-extrabold text-blue-600 uppercase">Fase 3</div><div class="font-bold text-sm text-slate-700">O Corpo em Ação</div></div>
+            <div class="bg-white rounded-2xl p-3 shadow-sm border border-indigo-100"><div class="text-xs font-extrabold text-indigo-600 uppercase">Fase 4</div><div class="font-bold text-sm text-slate-700">Jogo da Memória</div></div>
+        </div>
+        <button onclick="startGame()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-10 rounded-full shadow-lg transform transition hover:scale-105 text-xl">
+            Iniciar Construção
+        </button>
+        <details class="mt-6 max-w-xl w-full text-left bg-white/70 rounded-2xl border border-green-100 p-4 text-sm text-slate-600">
+            <summary class="font-extrabold text-green-700 cursor-pointer">👩‍🏫 Para o professor</summary>
+            <div class="mt-3 space-y-2">
+                <p><b>Público:</b> 5º ano do Ensino Fundamental (adaptável ao 6º e 8º anos). <b>Duração estimada:</b> 40 a 50 minutos.</p>
+                <p><b>BNCC – EF05CI06:</b> justificar por que os sistemas digestório e respiratório são corresponsáveis pela nutrição do organismo.</p>
+                <p><b>BNCC – EF05CI07:</b> relacionar o funcionamento do sistema circulatório à distribuição dos nutrientes e à eliminação dos resíduos.</p>
+                <p><b>Como funciona:</b> a cada sistema montado, o aluno faz uma missão guiada pelo caminho do alimento, do ar, do sangue ou da urina, com tarefas de escolha, associação, classificação e simulação (respiração e batimentos). Os termos aprendidos vão para o <b>📒 Caderno de Descobertas</b>, que pode ser consultado a qualquer momento.</p>
+                <p><b>Sugestão:</b> ao final, peça que os alunos expliquem com as próprias palavras a “viagem” de um nutriente, da boca até uma célula do pé.</p>
+            </div>
+        </details>
+    </div>
+
+    <!-- FASE 1: Montagem -->
+    <div id="game-ui" class="hidden absolute inset-0 flex-col overflow-y-auto">
+        <div class="w-full max-w-6xl mx-auto p-2 md:p-6 flex flex-col flex-1 pb-20 md:pb-6">
+            <header class="flex justify-between items-center gap-3 mb-3 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div class="min-w-0">
+                    <div id="system-step" class="text-xs font-extrabold uppercase tracking-wider text-orange-500">Fase 1 · Sistema 1 de 4 · Montagem</div>
+                    <h2 id="system-title" class="text-xl md:text-2xl font-bold text-slate-700">Sistema Digestório</h2>
+                    <p id="system-desc" class="text-xs md:text-sm text-slate-500">Extrai energia e nutrientes dos alimentos.</p>
+                </div>
+                <div class="flex flex-col items-end gap-2 shrink-0">
+                    <div class="flex gap-2">
+                        <div id="dot-0" class="w-4 h-4 rounded-full bg-orange-400 shadow-inner"></div>
+                        <div id="dot-1" class="w-4 h-4 rounded-full bg-slate-200 shadow-inner"></div>
+                        <div id="dot-2" class="w-4 h-4 rounded-full bg-slate-200 shadow-inner"></div>
+                        <div id="dot-3" class="w-4 h-4 rounded-full bg-slate-200 shadow-inner"></div>
+                    </div>
+                    <div id="organ-count" class="text-xs font-bold text-slate-400">0/5 órgãos</div>
+                </div>
+            </header>
+
+            <div class="flex-1 flex flex-col md:flex-row gap-4 md:gap-6">
+                <div class="flex-1 flex justify-center items-center relative pt-2">
+                    <div id="body-map" class="body-container"></div>
+                    <div id="feedback-toast" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-xl shadow-lg font-bold text-sm opacity-0 transition-opacity pointer-events-none z-50 text-center w-64 border-2">Feedback</div>
+                </div>
+
+                <div class="w-full md:w-80 flex flex-col gap-3 bg-white p-3 md:p-4 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 class="text-lg font-bold text-center text-slate-600 border-b pb-2">Órgãos Disponíveis</h3>
+                    <p class="text-xs text-slate-400 text-center -mt-1">Arraste cada órgão até o contorno pontilhado certo no corpo.</p>
+                    <div id="inventory" class="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-3 p-1"></div>
+                    <div id="organ-fact" class="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-sm text-slate-500">
+                        🔎 Ao encaixar um órgão, a <b>ficha</b> dele aparece aqui.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FASE 1: Missão de cada sistema -->
+    <div id="mission-screen" class="hidden absolute inset-0 z-40 flex-col overflow-y-auto">
+        <div class="w-full max-w-6xl mx-auto p-2 md:p-5 flex flex-col flex-1 pb-20 md:pb-5">
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 mb-3 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div class="min-w-0">
+                    <div id="m-kicker" class="text-xs font-extrabold uppercase tracking-wider text-orange-500">Fase 1 · Missão</div>
+                    <h2 id="m-title" class="text-xl md:text-2xl font-extrabold text-slate-700">A Viagem do Alimento</h2>
+                    <p id="m-sub" class="text-xs md:text-sm text-slate-500"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 text-center">
+                        <span class="block text-[0.6rem] font-bold text-slate-400 uppercase">Estação</span>
+                        <span id="m-step" class="text-lg font-black text-slate-700 leading-none">0/6</span>
+                    </div>
+                    <div class="bg-red-50 px-3 py-1.5 rounded-xl border border-red-100 text-center">
+                        <span class="block text-[0.6rem] font-bold text-red-400 uppercase">Erros</span>
+                        <span id="m-errors" class="text-lg font-black text-red-600 leading-none">0</span>
+                    </div>
+                </div>
+            </header>
+            <div class="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 items-center md:items-start justify-center">
+                <div class="flex flex-col items-center gap-3 shrink-0">
+                    <div id="m-body" class="body-container"></div>
+                    <div id="m-tracker" class="w-full max-w-[344px] bg-white rounded-2xl border border-slate-100 shadow-sm p-3 space-y-2"></div>
+                </div>
+                <div class="w-full md:w-[460px] md:max-h-[calc(100dvh-140px)] md:overflow-y-auto rounded-[1.75rem]">
+                    <div id="m-card" class="q-card p-5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de transição -->
+    <div id="level-modal" class="fixed inset-0 z-[60] bg-black/60 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl fade-up">
+            <div id="modal-icon" class="text-6xl mb-4">🎉</div>
+            <h2 id="modal-title" class="text-2xl font-bold mb-2 text-slate-800">Sistema Montado!</h2>
+            <p id="modal-text" class="text-slate-600 mb-6"></p>
+            <button id="modal-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition">Continuar</button>
+        </div>
+    </div>
+
+    <!-- FASE 2: Quiz -->
+    <div id="quiz-screen" class="hidden absolute inset-0 z-40 flex-col overflow-y-auto">
+        <div class="w-full max-w-3xl mx-auto px-4 pt-5 shrink-0">
+            <div class="flex items-end justify-between mb-2 gap-3">
+                <div>
+                    <div class="text-xs font-extrabold uppercase tracking-wider text-purple-500">Fase 2 · Desafio do Conhecimento</div>
+                    <div id="quiz-progress-label" class="text-sm text-slate-500 font-semibold">Pergunta 1 de 16</div>
+                </div>
+                <div id="quiz-score" class="bg-white rounded-full px-4 py-2 font-extrabold text-purple-600 shadow-sm border border-purple-100 whitespace-nowrap">0 acertos</div>
+            </div>
+            <div class="h-2.5 w-full bg-purple-200/60 rounded-full overflow-hidden">
+                <div id="quiz-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width:0%"></div>
+            </div>
+        </div>
+        <div id="quiz-body" class="flex-1 w-full max-w-3xl mx-auto px-4 py-4 pb-20 flex flex-col items-center justify-center"></div>
+    </div>
+
+    <!-- FASE 3: O Corpo em Ação -->
+    <div id="phase3-screen" class="hidden absolute inset-0 z-40 flex-col overflow-y-auto">
+        <div class="w-full max-w-5xl mx-auto px-4 pt-5 shrink-0 text-center">
+            <div class="text-xs font-extrabold uppercase tracking-wider text-blue-500">Fase 3 · O Corpo em Ação</div>
+            <h2 class="text-xl md:text-2xl font-extrabold text-slate-800">Escolha um sistema e veja-o funcionando! 🎬</h2>
+        </div>
+        <div class="flex-1 w-full max-w-5xl mx-auto px-4 py-3 pb-20 flex flex-col md:flex-row gap-5 items-center justify-center">
+            <div class="flex justify-center items-center relative shrink-0">
+                <div id="p3-body" class="body-container"></div>
+            </div>
+            <div class="w-full md:w-96 flex flex-col gap-3">
+                <div id="p3-buttons" class="grid grid-cols-2 gap-2"></div>
+                <div id="p3-caption" class="q-card p-4 text-slate-700 text-sm min-h-[8rem]"></div>
+                <button id="p3-finish-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-md transition">Fase 4: Jogo da Memória →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FASE 4: Jogo da Memória -->
+    <div id="phase4-screen" class="hidden absolute inset-0 z-40 flex-col overflow-y-auto">
+        <div class="w-full max-w-3xl mx-auto px-4 pt-5 shrink-0">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div class="min-w-0">
+                    <div class="text-xs font-extrabold uppercase tracking-wider text-indigo-500">Fase 4 · Jogo da Memória</div>
+                    <div class="text-sm text-slate-500 font-semibold">Ligue cada órgão ao seu nome! 🧠</div>
+                </div>
+                <div class="flex items-center gap-2 md:gap-3 shrink-0">
+                    <div class="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 text-center">
+                        <span class="block text-[0.6rem] font-bold text-indigo-400 uppercase">Jogadas</span>
+                        <span id="mem-moves" class="text-xl font-black text-indigo-700 leading-none">0</span>
+                    </div>
+                    <div class="bg-green-50 px-3 py-1.5 rounded-xl border border-green-100 text-center">
+                        <span class="block text-[0.6rem] font-bold text-green-500 uppercase">Pares</span>
+                        <span id="mem-pairs" class="text-xl font-black text-green-700 leading-none">0/10</span>
+                    </div>
+                    <button onclick="memInit()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold w-10 h-10 rounded-full shadow-md transition transform hover:scale-105 active:scale-95 flex items-center justify-center text-lg" aria-label="Reiniciar">↻</button>
+                </div>
+            </div>
+        </div>
+        <div class="flex-1 w-full max-w-xl mx-auto px-4 py-4 pb-20 flex items-center justify-center">
+            <div id="mem-board" class="grid grid-cols-4 sm:grid-cols-5 gap-2 md:gap-3 w-full perspective-1000"></div>
+        </div>
+    </div>
+
+    <!-- Tela Final -->
+    <div id="final-screen" class="hidden absolute inset-0 z-50 bg-green-50 flex-col items-center overflow-y-auto p-6 pb-20 text-center"></div>
+
+    <!-- Caderno de Descobertas -->
+    <div id="notebook-modal" class="fixed inset-0 z-[65] bg-black/60 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[88dvh] flex flex-col shadow-2xl fade-up">
+            <div class="flex items-center justify-between p-5 border-b border-slate-100">
+                <div>
+                    <h2 class="text-xl font-extrabold text-slate-800">📒 Caderno de Descobertas</h2>
+                    <p id="nb-sub" class="text-xs text-slate-500 font-semibold"></p>
+                </div>
+                <button onclick="closeNotebook()" class="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 font-black text-slate-500" aria-label="Fechar">✕</button>
+            </div>
+            <div id="nb-body" class="p-5 overflow-y-auto space-y-5"></div>
+        </div>
+    </div>
+
+    <!-- Ferramentas flutuantes -->
+    <div id="g-tools" class="fixed bottom-3 right-3 z-[70] flex gap-2">
+        <button id="btn-notebook" class="tool-btn" title="Caderno de Descobertas" onclick="openNotebook()">📒<span id="nb-count" class="badge">0</span></button>
+        <button id="btn-sound" class="tool-btn" title="Ligar/desligar som" onclick="Sound.toggle()">🔊</button>
+    </div>
+
+    <!-- Aviso global -->
+    <div id="g-toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[80] max-w-sm w-[90vw] bg-white border-2 border-indigo-300 text-slate-700 rounded-2xl shadow-xl px-4 py-3 text-sm font-semibold text-center pointer-events-none transition-opacity duration-300 opacity-0"></div>
+
+    <script>
+        // ============================================================
+        //  BASE DE DADOS — SISTEMAS E ÓRGÃOS (Fase 1: montagem)
+        // ============================================================
+        const gameData = [
+            {
+                id: 'digestorio',
+                name: 'Sistema Digestório',
+                color: 'orange', hex: '#f97316',
+                desc: 'A porta de entrada: transforma os alimentos em nutrientes que o corpo consegue absorver.',
+                icon: '🍔',
+                organs: [
+                    { id: 'boca', name: 'Boca', src: '1.png', top: '8%', left: '40%', width: '20%', height: '18%', z: 6,
+                      hint: 'A porta de entrada dos alimentos, na cabeça.',
+                      fact: 'Um adulto tem 32 dentes permanentes; uma criança, 20 dentes de leite. As glândulas salivares produzem cerca de 1 litro de saliva por dia!' },
+                    { id: 'esofago', name: 'Esôfago', src: '2.png', top: '22%', left: '43%', width: '12%', height: '24%', placedTop: '23%', placedLeft: '44%', placedWidth: '12%', placedHeight: '25%', z: 5,
+                      hint: 'O tubo que liga a boca ao estômago, descendo pelo pescoço.',
+                      fact: 'Tubo muscular de cerca de 25 cm. Seus músculos empurram o alimento em ondas (peristaltismo) — por isso conseguimos engolir até de cabeça para baixo!' },
+                    { id: 'estomago', name: 'Estômago', src: '3.png', top: '41%', left: '45%', width: '24%', height: '15%', z: 6,
+                      hint: 'Bolsa em forma de “J”, logo abaixo das costelas, mais para o lado esquerdo do corpo.',
+                      fact: 'Vazio, é pequeno; cheio, pode guardar mais de 1 litro de alimento. O suco gástrico é muito ácido, e uma camada de muco protege a parede.' },
+                    { id: 'figado', name: 'Fígado', src: '4.png', top: '39%', left: '22%', width: '30%', height: '13%', z: 7,
+                      hint: 'A maior glândula do corpo. Fica do lado direito do corpo (à esquerda de quem olha).',
+                      fact: 'É o maior órgão interno (cerca de 1,5 kg no adulto). Produz a bile, que fica guardada na vesícula biliar — a bolsinha verde do desenho.' },
+                    { id: 'intestinos', name: 'Intestinos', src: '5.png', top: '54%', left: '28%', width: '44%', height: '28%', z: 5,
+                      hint: 'Ocupam a maior parte da barriga, abaixo do estômago.',
+                      fact: 'O intestino delgado (o “enrolado” do meio) mede de 6 a 7 metros; o intestino grosso, que forma a “moldura”, cerca de 1,5 metro.' }
+                ]
+            },
+            {
+                id: 'respiratorio',
+                name: 'Sistema Respiratório',
+                color: 'sky', hex: '#0ea5e9',
+                desc: 'O combustível: traz o oxigênio que as células usam para liberar a energia dos nutrientes.',
+                icon: '💨',
+                organs: [
+                    { id: 'traqueia', name: 'Traqueia', src: '7.png', top: '20%', left: '40%', width: '20%', height: '22%', z: 5,
+                      hint: 'O tubo de ar que desce pelo pescoço, na frente do esôfago.',
+                      fact: 'Tem de 10 a 12 cm e anéis de cartilagem em forma de “C” que a mantêm sempre aberta. Você consegue senti-los na frente do pescoço!' },
+                    { id: 'pulmoes', name: 'Pulmões', src: '8.png', top: '24%', left: '27%', width: '47%', height: '27%', z: 9,
+                      hint: 'Duas grandes “esponjas” que ocupam quase todo o peito.',
+                      fact: 'O pulmão direito tem 3 lobos e o esquerdo tem 2 — ele é menor para dar espaço ao coração. Juntos têm centenas de milhões de alvéolos.' }
+                ]
+            },
+            {
+                id: 'circulatorio',
+                name: 'Sistema Circulatório',
+                color: 'red', hex: '#ef4444',
+                desc: 'A rodovia: transporta nutrientes e oxigênio para todas as células e recolhe os resíduos.',
+                icon: '🩸',
+                organs: [
+                    { id: 'coracao', name: 'Coração', src: '9.png', top: '28%', left: '39%', width: '22%', height: '20%', z: 15,
+                      hint: 'O motor central: no meio do peito, entre os pulmões, um pouco para o lado esquerdo do corpo.',
+                      fact: 'Tem o tamanho de um punho fechado e 4 cavidades: 2 átrios e 2 ventrículos. Bate mais de 100 mil vezes por dia!' }
+                ]
+            },
+            {
+                id: 'excretor',
+                name: 'Sistema Excretor',
+                color: 'yellow', hex: '#eab308',
+                desc: 'A limpeza: filtra o sangue, retira os resíduos das células e produz a urina.',
+                icon: '💧',
+                organs: [
+                    { id: 'rins', name: 'Rins', src: '10.png', top: '44%', left: '30%', width: '40%', height: '24%', z: 4,
+                      hint: 'Dois filtros em forma de feijão, na parte de trás da barriga, um de cada lado da coluna.',
+                      fact: 'Cada rim tem o tamanho de um punho e cerca de 1 milhão de néfrons, os filtros microscópicos. Os tubos que descem deles são os ureteres.' },
+                    { id: 'bexiga', name: 'Bexiga', src: '11.png', top: '69%', left: '40%', width: '20%', height: '14%', z: 10,
+                      hint: 'Guarda a urina. Fica lá embaixo, na parte mais baixa da barriga.',
+                      fact: 'Bolsa muscular elástica. No adulto guarda de 400 a 500 mL de urina; quando começa a encher, nervos avisam o cérebro.' }
+                ]
+            }
+        ];
+
+        // ============================================================
+        //  MISSÕES — o "trabalho" de cada sistema
+        //  pos/via/start/end: coordenadas em % dentro do corpo (x, y)
+        //  Tipos de tarefa: actions | match | filter | breath | pump
+        // ============================================================
+        const missionsData = {};
+
+        missionsData.digestorio = {
+            title: 'A Viagem do Alimento',
+            traveler: { label: 'Sanduíche', emoji: '🥪', color: '#fbbf24' },
+            intro: 'Você vai guiar um <b>sanduíche de pão com queijo e manteiga</b> por todo o tubo digestório. O pão é rico em <b>amido</b> (um carboidrato), o queijo em <b>proteínas</b> e a manteiga em <b>gorduras</b>. Sua missão: quebrar tudo em partes tão pequenas que o corpo consiga absorver!',
+            tracker: [
+                { key: 'amido', label: 'Amido digerido', icon: '🍞', color: '#f59e0b' },
+                { key: 'proteinas', label: 'Proteínas digeridas', icon: '🧀', color: '#ef4444' },
+                { key: 'gorduras', label: 'Gorduras digeridas', icon: '🧈', color: '#eab308' },
+                { key: 'sangue', label: 'Nutrientes no sangue', icon: '🩸', color: '#dc2626' }
+            ],
+            start: { x: 80, y: 9 },
+            stations: [
+                {
+                    name: 'Boca', img: '1.png', pos: { x: 50, y: 16 },
+                    text: [
+                        'A digestão começa aqui! Os <b>dentes</b> cortam e trituram o alimento em pedaços menores: é a <b>digestão mecânica</b>.',
+                        'As <b>glândulas salivares</b> liberam a <b>saliva</b>, que amolece o alimento e contém a enzima <b>amilase salivar</b> (ptialina). Ela começa a quebrar o <b>amido</b> do pão: é a <b>digestão química</b>.',
+                        'A <b>língua</b> mistura tudo e forma uma bolinha macia: o <b>bolo alimentar</b>.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Quais ações acontecem na boca? Encontre as 3 certas.', actions: [
+                            { label: 'Mastigar com os dentes', icon: '🦷', correct: true, msg: 'Isso! Pedaços menores têm mais superfície para as enzimas agirem.' },
+                            { label: 'Misturar com a saliva', icon: '💧', correct: true, msg: 'Certo! A amilase salivar começa a digerir o amido.' },
+                            { label: 'Formar o bolo com a língua', icon: '👅', correct: true, msg: 'Isso! A língua mistura e empurra o bolo alimentar para a garganta.' },
+                            { label: 'Adicionar suco gástrico', icon: '🧪', correct: false, msg: 'Ainda não! O suco gástrico só é produzido no estômago.' },
+                            { label: 'Absorver os nutrientes', icon: '🧲', correct: false, msg: 'Quase nada é absorvido na boca. A absorção acontece no intestino delgado.' }
+                        ]},
+                        { type: 'match', prompt: 'Cada tipo de dente tem uma função. Ligue cada um à sua tarefa:', pairs: [
+                            { item: '🦷 Incisivos (da frente)', answer: 'Cortar', msg: 'Os incisivos são finos e afiados como uma tesoura: cortam o alimento.', hint: 'Os incisivos são finos e retos, como a lâmina de uma tesoura.' },
+                            { item: '🦷 Caninos (pontudos)', answer: 'Rasgar e perfurar', msg: 'Os caninos são pontudos e ajudam a rasgar alimentos mais duros.', hint: 'Os caninos são pontudos, como uma lança.' },
+                            { item: '🦷 Molares (do fundo)', answer: 'Triturar e moer', msg: 'Os molares são largos e irregulares: funcionam como um pilão.', hint: 'Os molares são largos e fortes, como um pilão.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Bolo alimentar', color: '#c4b5fd' }, tracker: { amido: 20 } },
+                    fact: 'Sentimos o sabor graças às papilas gustativas da língua — e o cheiro do alimento, sentido pelo nariz, ajuda muito! Por isso a comida parece sem graça quando estamos resfriados.',
+                    glossary: [
+                        ['Digestão mecânica', 'Quebra física do alimento em pedaços menores, pela mastigação e pelos movimentos dos órgãos.'],
+                        ['Digestão química', 'Quebra das moléculas dos alimentos pela ação das enzimas dos sucos digestivos.'],
+                        ['Enzima', 'Substância que acelera a quebra dos alimentos. Cada enzima atua em um tipo de nutriente.'],
+                        ['Amilase salivar', 'Enzima da saliva (também chamada ptialina) que começa a digestão do amido.'],
+                        ['Bolo alimentar', 'Bolinha de alimento mastigado e misturado com saliva, pronta para ser engolida.']
+                    ],
+                    summary: 'Mastigação e saliva: o sanduíche vira bolo alimentar e o amido começa a ser digerido.'
+                },
+                {
+                    name: 'Faringe e Esôfago', img: '2.png', pos: { x: 50, y: 34 }, via: [{ x: 50, y: 23 }],
+                    text: [
+                        'Ao engolir (<b>deglutição</b>), o bolo passa pela <b>faringe</b>, um cruzamento usado tanto pelo alimento quanto pelo ar.',
+                        'Para o alimento não ir para o caminho do ar, uma “tampinha” chamada <b>epiglote</b> fecha a entrada da laringe. É por isso que engasgamos quando falamos ou rimos enquanto engolimos!',
+                        'No <b>esôfago</b>, um tubo de cerca de 25 cm, os músculos se contraem em ondas — o <b>peristaltismo</b> — e empurram o bolo até o estômago em poucos segundos.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que ajuda o bolo alimentar a chegar ao estômago? Encontre as 2 certas.', actions: [
+                            { label: 'A epiglote fecha a passagem do ar', icon: '🚪', correct: true, msg: 'Isso! Assim o alimento vai para o esôfago, e não para a traqueia.' },
+                            { label: 'Ondas musculares (peristaltismo)', icon: '〰️', correct: true, msg: 'Certo! O peristaltismo empurra o alimento mesmo se estivermos de cabeça para baixo.' },
+                            { label: 'A gravidade faz todo o trabalho', icon: '⬇️', correct: false, msg: 'Não é só a gravidade: são os músculos do esôfago que empurram o alimento.' },
+                            { label: 'O esôfago produz a bile', icon: '🟢', correct: false, msg: 'A bile é produzida pelo fígado e atua no intestino delgado.' }
+                        ]}
+                    ],
+                    after: { tracker: { amido: 25 } },
+                    fact: 'Astronautas conseguem engolir no espaço, sem gravidade, graças ao peristaltismo!',
+                    glossary: [
+                        ['Deglutição', 'Ato de engolir: o bolo alimentar passa da boca para a faringe e depois para o esôfago.'],
+                        ['Faringe', 'Canal da garganta por onde passam o alimento e o ar. É comum aos sistemas digestório e respiratório.'],
+                        ['Epiglote', 'Estrutura que fecha a laringe durante a deglutição, impedindo que o alimento vá para as vias respiratórias.'],
+                        ['Peristaltismo', 'Contrações em onda dos músculos do tubo digestório que empurram o alimento.']
+                    ],
+                    summary: 'Deglutição e peristaltismo levam o bolo pelo esôfago; a epiglote protege o caminho do ar.'
+                },
+                {
+                    name: 'Estômago', img: '3.png', pos: { x: 58, y: 48 },
+                    text: [
+                        'O estômago é uma bolsa muscular que se estica e pode guardar mais de 1 litro de alimento.',
+                        'Suas paredes liberam o <b>suco gástrico</b>, que contém <b>ácido clorídrico</b> (muito ácido — mata muitos microrganismos) e a enzima <b>pepsina</b>, que começa a digerir as <b>proteínas</b> do queijo.',
+                        'Uma camada de <b>muco</b> protege a parede contra o próprio ácido. Os músculos misturam tudo durante 2 a 4 horas, até formar uma pasta: o <b>quimo</b>.',
+                        'Um anel muscular, o <b>piloro</b>, libera o quimo aos pouquinhos para o intestino.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que o estômago faz com o bolo alimentar? Encontre as 3 certas.', actions: [
+                            { label: 'Liberar suco gástrico', icon: '🧪', correct: true, msg: 'Isso! A pepsina começa a digerir as proteínas.' },
+                            { label: 'Contrair e misturar', icon: '🔄', correct: true, msg: 'Certo! Os movimentos misturam o alimento com o suco gástrico.' },
+                            { label: 'Produzir muco protetor', icon: '🛡️', correct: true, msg: 'Isso! Sem o muco, o ácido feriria a parede do estômago.' },
+                            { label: 'Absorver toda a água', icon: '🚰', correct: false, msg: 'A maior parte da água é absorvida nos intestinos, não no estômago.' },
+                            { label: 'Filtrar o sangue', icon: '🫘', correct: false, msg: 'Filtrar o sangue é trabalho dos rins, no sistema excretor.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Quimo', color: '#d9f99d' }, tracker: { proteinas: 40 } },
+                    fact: 'O suco gástrico é mais ácido que o suco de limão! Quando ele sobe para o esôfago, sentimos a “queimação” chamada azia.',
+                    glossary: [
+                        ['Suco gástrico', 'Suco digestivo do estômago, formado por ácido clorídrico, enzimas (como a pepsina) e água.'],
+                        ['Pepsina', 'Enzima do suco gástrico que inicia a digestão das proteínas.'],
+                        ['Quimo', 'Pasta ácida formada no estômago pela mistura do bolo alimentar com o suco gástrico.'],
+                        ['Piloro', 'Anel muscular que controla a passagem do quimo do estômago para o intestino.']
+                    ],
+                    summary: 'Suco gástrico e movimentos musculares: as proteínas começam a ser digeridas e o bolo vira quimo.'
+                },
+                {
+                    name: 'Duodeno, Fígado e Pâncreas', img: '4.png', pos: { x: 46, y: 55 },
+                    text: [
+                        'O quimo chega ao <b>duodeno</b>, a primeira parte do intestino delgado. Aqui ele recebe três “ajudantes”:',
+                        '🟢 A <b>bile</b>, produzida pelo <b>fígado</b> e guardada na <b>vesícula biliar</b>. Ela não é uma enzima: funciona como um detergente, quebrando a gordura em gotinhas bem pequenas (<b>emulsificação</b>).',
+                        '🧪 O <b>suco pancreático</b>, produzido pelo <b>pâncreas</b> (um órgão atrás do estômago), com enzimas que digerem amido, proteínas e gorduras, e com bicarbonato, que neutraliza a acidez do quimo.',
+                        '💧 O <b>suco intestinal</b>, que termina a digestão. No final, o quimo vira um líquido chamado <b>quilo</b>.'
+                    ],
+                    tasks: [
+                        { type: 'match', prompt: 'Ligue cada ajudante à sua função:', pairs: [
+                            { item: '🟢 Bile (do fígado)', answer: 'Quebrar a gordura em gotinhas', msg: 'Isso! A emulsificação facilita o trabalho das enzimas sobre as gorduras.', hint: 'A bile funciona como um detergente na louça engordurada.' },
+                            { item: '🧪 Suco pancreático', answer: 'Enzimas e neutralizar o ácido', msg: 'Certo! O pâncreas envia enzimas para todos os nutrientes e bicarbonato contra a acidez.', hint: 'O pâncreas manda um “kit completo”: enzimas e um antiácido natural.' },
+                            { item: '💧 Suco intestinal', answer: 'Terminar a digestão', msg: 'Isso! As últimas enzimas deixam os nutrientes prontos para ser absorvidos.', hint: 'É o último suco digestivo da viagem.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Quilo', color: '#fef08a' }, tracker: { amido: 100, proteinas: 100, gorduras: 100 } },
+                    fact: 'O fígado é o maior órgão interno do corpo: pesa cerca de 1,5 kg no adulto e realiza centenas de funções, como armazenar energia e transformar substâncias tóxicas.',
+                    glossary: [
+                        ['Duodeno', 'Primeira parte do intestino delgado, onde o quimo recebe a bile e o suco pancreático.'],
+                        ['Bile', 'Líquido produzido pelo fígado que quebra as gorduras em gotinhas (emulsificação). Não é uma enzima.'],
+                        ['Vesícula biliar', 'Pequena bolsa, junto ao fígado, que armazena a bile.'],
+                        ['Pâncreas', 'Glândula que produz o suco pancreático, com enzimas para todos os tipos de nutrientes.'],
+                        ['Quilo', 'Líquido formado no intestino delgado ao final da digestão, rico em nutrientes prontos para a absorção.']
+                    ],
+                    summary: 'Bile, suco pancreático e suco intestinal completam a digestão: o quimo vira quilo.'
+                },
+                {
+                    name: 'Intestino Delgado', img: '5.png', pos: { x: 52, y: 67 },
+                    text: [
+                        'O intestino delgado mede de 6 a 7 metros e fica todo dobrado dentro da barriga.',
+                        'Sua parede interna é cheia de dobrinhas chamadas <b>vilosidades</b>, cobertas por outras ainda menores (as microvilosidades). Elas aumentam muito a área de contato, como os fios de uma toalha felpuda.',
+                        'Os nutrientes digeridos — <b>glicose</b> (do amido), <b>aminoácidos</b> (das proteínas), ácidos graxos (das gorduras), vitaminas e sais minerais — atravessam a parede e entram no <b>sangue</b>. Esta é a <b>absorção</b>!'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Complete a absorção! Encontre as 2 ações certas.', actions: [
+                            { label: 'Absorver pelas vilosidades', icon: '🧽', correct: true, msg: 'Isso! As vilosidades são a “porta de entrada” dos nutrientes.' },
+                            { label: 'Enviar os nutrientes ao sangue', icon: '🩸', correct: true, msg: 'Certo! O sistema circulatório vai distribuí-los para todas as células.' },
+                            { label: 'Formar a urina', icon: '🚽', correct: false, msg: 'A urina é formada nos rins, a partir do sangue.' },
+                            { label: 'Mastigar de novo', icon: '🦷', correct: false, msg: 'A mastigação acontece só na boca.' }
+                        ]},
+                        { type: 'match', prompt: 'Cada nutriente foi quebrado em partes menores. Ligue cada um ao que ele virou:', pairs: [
+                            { item: '🍞 Amido (do pão)', answer: 'Glicose', msg: 'Isso! A glicose é a principal fonte de energia das células.', hint: 'O amido é feito de muitas moléculas de açúcar grudadas.' },
+                            { item: '🧀 Proteínas (do queijo)', answer: 'Aminoácidos', msg: 'Certo! Os aminoácidos são usados para construir e reparar o corpo.', hint: 'As proteínas são como colares de contas chamadas aminoácidos.' },
+                            { item: '🧈 Gorduras (da manteiga)', answer: 'Ácidos graxos', msg: 'Isso! Eles fornecem energia e formam partes das células.', hint: 'As gorduras são quebradas em ácidos graxos e glicerol.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Restos + água', color: '#d6b98c' }, tracker: { sangue: 100 } },
+                    fact: 'As vilosidades são tão pequenas que cada centímetro quadrado do intestino tem milhares delas. Sem elas, precisaríamos de um intestino muitas vezes maior!',
+                    glossary: [
+                        ['Vilosidades', 'Dobrinhas da parede interna do intestino delgado que aumentam a área de absorção.'],
+                        ['Absorção', 'Passagem dos nutrientes digeridos do intestino para o sangue.'],
+                        ['Glicose', 'Açúcar simples resultante da digestão do amido. É a principal fonte de energia das células.'],
+                        ['Aminoácidos', 'Pequenas partes que formam as proteínas. O corpo os usa para crescer e se reparar.']
+                    ],
+                    summary: 'As vilosidades absorvem glicose, aminoácidos e outros nutrientes, que entram no sangue.'
+                },
+                {
+                    name: 'Intestino Grosso', img: '5.png', pos: { x: 31, y: 63 }, via: [{ x: 36, y: 75 }],
+                    text: [
+                        'O que não foi absorvido chega ao <b>intestino grosso</b>, com cerca de 1,5 metro: restos que não conseguimos digerir (como as <b>fibras</b> das frutas e verduras), água e sais.',
+                        'Aqui é <b>absorvida a maior parte da água</b> que sobrou e alguns sais minerais. Assim, a massa vai ficando mais firme.',
+                        'Trilhões de bactérias do bem — a <b>microbiota intestinal</b> — fermentam as fibras e produzem algumas vitaminas, como a vitamina K.',
+                        'Os restos formam as <b>fezes</b>, que ficam no <b>reto</b> até serem eliminadas pelo <b>ânus</b>.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que acontece no intestino grosso? Encontre as 3 certas.', actions: [
+                            { label: 'Absorver água', icon: '🚰', correct: true, msg: 'Isso! Beber água e comer fibras ajuda o intestino a funcionar bem.' },
+                            { label: 'A microbiota trabalha', icon: '🦠', correct: true, msg: 'Certo! As bactérias do bem fermentam as fibras e produzem vitaminas.' },
+                            { label: 'Formar e guardar as fezes', icon: '💩', correct: true, msg: 'Isso! As fezes ficam no reto até a hora de ir ao banheiro.' },
+                            { label: 'Adicionar bile', icon: '🟢', correct: false, msg: 'A bile é lançada no duodeno, lá no início do intestino delgado.' },
+                            { label: 'Digerir as proteínas', icon: '🍗', correct: false, msg: 'As proteínas já foram digeridas no estômago e no intestino delgado.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Fezes', emoji: '💩', color: '#a16207' } },
+                    fact: 'A viagem completa do alimento pelo tubo digestório, que tem cerca de 9 metros no total, leva em geral de 24 a 72 horas!',
+                    glossary: [
+                        ['Microbiota intestinal', 'Conjunto de trilhões de microrganismos que vivem no intestino e ajudam na saúde, fermentando fibras e produzindo vitaminas.'],
+                        ['Fibras', 'Partes dos vegetais que não digerimos. Ajudam a formar as fezes e o intestino a funcionar.'],
+                        ['Fezes', 'Restos não digeridos, água, bactérias e células descamadas, eliminados pelo ânus.'],
+                        ['Egestão', 'Eliminação das fezes (restos que nem chegaram a entrar nas células). É diferente da excreção!']
+                    ],
+                    summary: 'A água é absorvida, a microbiota trabalha e os restos formam as fezes, eliminadas pelo ânus.'
+                }
+            ],
+            end: [{ x: 50, y: 57 }, { x: 68, y: 63 }, { x: 60, y: 76 }, { x: 51, y: 81 }, { x: 51, y: 90 }],
+            outro: 'O sanduíche virou nutrientes, que agora estão no sangue! Atenção a um detalhe importante: eliminar as fezes é <b>egestão</b> — são restos que nem entraram nas células. A <b>excreção</b>, que elimina resíduos produzidos pelas próprias células, é trabalho de outro sistema.',
+            next: 'Mas as células precisam de mais uma coisa para liberar a energia dos nutrientes: <b>oxigênio</b>. Quem traz o oxigênio para o corpo? O <b>sistema respiratório</b>!'
+        };
+
+        missionsData.respiratorio = {
+            title: 'A Viagem do Ar',
+            traveler: { label: 'Ar com O₂', emoji: '💨', color: '#e0f2fe' },
+            intro: 'O ar que respiramos é uma mistura de gases: cerca de 78% de nitrogênio, 21% de <b>oxigênio (O₂)</b> e um pouquinho de <b>gás carbônico (CO₂)</b>. Sua missão é levar o oxigênio até o sangue e depois eliminar o gás carbônico que o corpo produziu.',
+            tracker: [
+                { key: 'o2', label: 'O₂ levado ao sangue', icon: '🫧', color: '#0ea5e9' },
+                { key: 'co2', label: 'CO₂ eliminado', icon: '🌫️', color: '#64748b' }
+            ],
+            start: { x: 74, y: 6 },
+            stations: [
+                {
+                    name: 'Fossas Nasais', emoji: '👃', pos: { x: 50, y: 11 },
+                    text: [
+                        'O ar entra pelas <b>narinas</b> e passa pelas <b>fossas nasais</b>. Lá dentro, <b>pelos</b> e <b>muco</b> seguram poeira e microrganismos.',
+                        'Vasos sanguíneos na parede do nariz <b>aquecem</b> o ar, e o muco o <b>umedece</b>. Assim, o ar chega aos pulmões limpo, morno e úmido.',
+                        'Por isso é melhor respirar pelo nariz do que pela boca! No alto das fossas nasais ficam também as células do <b>olfato</b>.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que o nariz faz com o ar? Encontre as 3 certas.', actions: [
+                            { label: 'Filtrar com pelos e muco', icon: '🧹', correct: true, msg: 'Isso! A poeira fica presa no muco e depois é eliminada.' },
+                            { label: 'Aquecer o ar', icon: '🔥', correct: true, msg: 'Certo! O sangue que passa perto da parede do nariz aquece o ar.' },
+                            { label: 'Umedecer o ar', icon: '💦', correct: true, msg: 'Isso! Ar muito seco irritaria as vias respiratórias.' },
+                            { label: 'Fazer as trocas gasosas', icon: '🔁', correct: false, msg: 'As trocas gasosas acontecem lá no fundo dos pulmões, nos alvéolos.' },
+                            { label: 'Digerir a poeira', icon: '🧪', correct: false, msg: 'O nariz não digere nada: ele prende a poeira no muco.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Ar limpo e aquecido', emoji: '💨', color: '#bae6fd' } },
+                    fact: 'O espirro é um reflexo que expulsa partículas irritantes do nariz — o ar sai em altíssima velocidade! Por isso devemos cobrir a boca e o nariz com o braço.',
+                    glossary: [
+                        ['Fossas nasais', 'Cavidades do nariz que filtram, aquecem e umedecem o ar. Também abrigam as células do olfato.'],
+                        ['Muco', 'Líquido pegajoso que reveste as vias respiratórias e prende poeira e microrganismos.']
+                    ],
+                    summary: 'O nariz filtra, aquece e umedece o ar.'
+                },
+                {
+                    name: 'Faringe e Laringe', emoji: '🗣️', pos: { x: 50, y: 21 },
+                    text: [
+                        'O ar passa pela <b>faringe</b> — o mesmo cruzamento por onde passa o alimento — e entra na <b>laringe</b>.',
+                        'Na laringe ficam as <b>pregas vocais</b> (conhecidas como cordas vocais). Quando o ar sai dos pulmões e as faz vibrar, produzimos a <b>voz</b>.',
+                        'Na entrada da laringe está a <b>epiglote</b>: ela fica aberta para o ar passar e só se fecha quando engolimos.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Sobre a laringe, encontre as 2 afirmações certas.', actions: [
+                            { label: 'Tem as pregas vocais, que produzem a voz', icon: '🎤', correct: true, msg: 'Isso! Quanto mais esticadas as pregas vocais, mais aguda fica a voz.' },
+                            { label: 'A epiglote fica aberta para o ar passar', icon: '🚪', correct: true, msg: 'Certo! Ela só fecha no momento em que engolimos.' },
+                            { label: 'É por onde o alimento vai ao estômago', icon: '🍔', correct: false, msg: 'O alimento vai pelo esôfago. A laringe é caminho só do ar.' },
+                            { label: 'É onde o O₂ entra no sangue', icon: '🩸', correct: false, msg: 'O O₂ entra no sangue nos alvéolos pulmonares.' }
+                        ]}
+                    ],
+                    fact: 'O “gogó” (pomo de Adão) é uma cartilagem da laringe! Na adolescência a laringe cresce, as pregas vocais ficam mais longas e a voz fica mais grave.',
+                    glossary: [
+                        ['Laringe', 'Tubo entre a faringe e a traqueia onde ficam as pregas vocais. Caminho exclusivo do ar.'],
+                        ['Pregas vocais', 'Dobras da laringe que vibram com a passagem do ar e produzem a voz.']
+                    ],
+                    summary: 'Pela faringe e pela laringe (onde está a voz), o ar segue para a traqueia.'
+                },
+                {
+                    name: 'Traqueia', img: '7.png', pos: { x: 50, y: 30 },
+                    text: [
+                        'A <b>traqueia</b> é um tubo de 10 a 12 cm que desce pelo pescoço, na frente do esôfago.',
+                        'Ela é formada por <b>anéis de cartilagem</b> em forma de “C”, que a mantêm sempre aberta — mesmo quando viramos o pescoço.',
+                        'Por dentro, é revestida de <b>muco</b> e de <b>cílios</b>, pelinhos microscópicos que se movem como uma escada rolante, levando a sujeira para cima, para ser engolida ou tossida.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Por que a traqueia é tão importante? Encontre as 2 certas.', actions: [
+                            { label: 'Anéis de cartilagem mantêm o tubo aberto', icon: '⭕', correct: true, msg: 'Isso! Se a traqueia se fechasse, o ar não passaria.' },
+                            { label: 'Cílios varrem o muco com sujeira', icon: '🧹', correct: true, msg: 'Certo! A tosse ajuda a expulsar esse muco.' },
+                            { label: 'Produz enzimas digestivas', icon: '🧪', correct: false, msg: 'Enzimas digestivas não fazem parte do sistema respiratório.' },
+                            { label: 'Bombeia o ar para os pulmões', icon: '💪', correct: false, msg: 'Quem faz o ar entrar é o movimento do diafragma e das costelas, não a traqueia.' }
+                        ]}
+                    ],
+                    fact: 'A fumaça do cigarro paralisa os cílios da traqueia. Sem a “escada rolante”, a sujeira se acumula — por isso fumantes tossem tanto.',
+                    glossary: [
+                        ['Traqueia', 'Tubo com anéis de cartilagem que leva o ar da laringe até os brônquios.'],
+                        ['Cílios', 'Estruturas microscópicas que se movem e varrem o muco com sujeira para fora das vias respiratórias.']
+                    ],
+                    summary: 'A traqueia, sempre aberta pelos anéis de cartilagem, conduz o ar até o peito.'
+                },
+                {
+                    name: 'Brônquios e Bronquíolos', emoji: '🌳', pos: { x: 42, y: 40 }, via: [{ x: 50, y: 36 }],
+                    text: [
+                        'No peito, a traqueia se divide em dois <b>brônquios</b>: um vai para o pulmão direito e o outro para o esquerdo.',
+                        'Dentro dos pulmões, os brônquios se ramificam muitas vezes, como os galhos de uma árvore de cabeça para baixo, formando tubos cada vez mais finos: os <b>bronquíolos</b>.',
+                        'O pulmão direito tem 3 partes (lobos) e o esquerdo tem 2 — ele é um pouco menor para dar espaço ao coração.'
+                    ],
+                    tasks: [
+                        { type: 'match', prompt: 'Coloque o caminho do ar em ordem! Ligue cada parte à sua posição:', pairs: [
+                            { item: 'Traqueia', answer: '1º', msg: 'Isso! A traqueia vem logo depois da laringe.', hint: 'É o tubo do pescoço, antes da divisão.' },
+                            { item: 'Brônquios', answer: '2º', msg: 'Certo! A traqueia se divide em dois brônquios.', hint: 'São os dois “galhos grossos” que saem da traqueia.' },
+                            { item: 'Bronquíolos', answer: '3º', msg: 'Isso! Os bronquíolos são os “galhinhos” mais finos.', hint: 'São ramificações dos brônquios.' },
+                            { item: 'Alvéolos', answer: '4º', msg: 'Certo! Os alvéolos são o fim do caminho, onde ocorrem as trocas.', hint: 'São as “folhas” da árvore: o final do caminho.' }
+                        ]}
+                    ],
+                    fact: 'Da traqueia até os menores bronquíolos, a “árvore respiratória” se divide mais de 20 vezes!',
+                    glossary: [
+                        ['Brônquios', 'Os dois tubos em que a traqueia se divide, um para cada pulmão.'],
+                        ['Bronquíolos', 'Ramificações finíssimas dos brônquios, que terminam nos alvéolos.']
+                    ],
+                    summary: 'Os brônquios se ramificam em bronquíolos, como galhos de uma árvore.'
+                },
+                {
+                    name: 'Alvéolos Pulmonares', img: '8.png', pos: { x: 35, y: 45 },
+                    text: [
+                        'Os bronquíolos terminam em saquinhos de ar microscópicos: os <b>alvéolos pulmonares</b>. Os dois pulmões juntos têm centenas de milhões deles!',
+                        'A parede dos alvéolos é finíssima e cercada por <b>capilares sanguíneos</b>. O <b>oxigênio</b> passa do ar para o sangue, e o <b>gás carbônico</b> passa do sangue para o ar. Essa troca se chama <b>hematose</b>.',
+                        'Os gases passam sozinhos, de onde há mais para onde há menos: é a <b>difusão</b>. No sangue, o O₂ é carregado pelas <b>hemácias</b>.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Faça a troca de gases! Encontre as 2 certas.', actions: [
+                            { label: 'O₂ passa do alvéolo para o sangue', icon: '⬇️', correct: true, msg: 'Isso! O sangue sai dos pulmões rico em oxigênio.' },
+                            { label: 'CO₂ passa do sangue para o alvéolo', icon: '⬆️', correct: true, msg: 'Certo! O gás carbônico será eliminado na expiração.' },
+                            { label: 'O CO₂ entra no sangue', icon: '↩️', correct: false, msg: 'Ao contrário! O CO₂ sai do sangue; quem entra é o O₂.' },
+                            { label: 'Os nutrientes entram no sangue', icon: '🍞', correct: false, msg: 'Os nutrientes entram no sangue no intestino delgado.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'CO₂ (gás carbônico)', emoji: '🌫️', color: '#cbd5e1' }, tracker: { o2: 100 } },
+                    fact: 'Se todos os alvéolos fossem abertos e esticados, cobririam cerca de 70 m² — o chão de uma sala de aula grande!',
+                    glossary: [
+                        ['Alvéolos', 'Saquinhos microscópicos no fim dos bronquíolos, onde ocorrem as trocas gasosas.'],
+                        ['Hematose', 'Troca de gases nos alvéolos: o O₂ entra no sangue e o CO₂ sai.'],
+                        ['Difusão', 'Passagem espontânea de uma substância de onde ela está mais concentrada para onde está menos.']
+                    ],
+                    summary: 'Nos alvéolos acontece a hematose: O₂ entra no sangue e CO₂ sai.'
+                },
+                {
+                    name: 'Diafragma', emoji: '🫁', pos: { x: 50, y: 53 },
+                    text: [
+                        'Agora o CO₂ precisa sair! Mas quem faz o ar entrar e sair? O <b>diafragma</b>, um músculo em forma de cúpula logo abaixo dos pulmões, com a ajuda dos músculos entre as costelas.',
+                        '<b>Inspiração:</b> o diafragma se contrai e desce, as costelas sobem, o peito aumenta de tamanho e o ar entra.',
+                        '<b>Expiração:</b> o diafragma relaxa e sobe, o peito diminui e o ar, rico em CO₂, é empurrado para fora.'
+                    ],
+                    tasks: [
+                        { type: 'breath', prompt: 'Controle o diafragma! <b>Segure</b> o botão para inspirar e <b>solte</b> para expirar. Faça 3 respirações completas.', cycles: 3 },
+                        { type: 'actions', prompt: 'E na expiração, o que acontece? Escolha a certa.', actions: [
+                            { label: 'O diafragma relaxa e sobe', icon: '⬆️', correct: true, msg: 'Isso! O espaço no peito diminui e o ar sai.' },
+                            { label: 'O diafragma contrai e desce', icon: '⬇️', correct: false, msg: 'Isso acontece na inspiração, quando o ar entra.' },
+                            { label: 'Os pulmões se enchem de ar', icon: '🎈', correct: false, msg: 'Os pulmões se enchem na inspiração.' }
+                        ]}
+                    ],
+                    after: { tracker: { co2: 100 } },
+                    fact: 'Em repouso, uma criança respira cerca de 20 vezes por minuto. Durante uma corrida, esse número pode mais que dobrar, porque os músculos precisam de mais oxigênio!',
+                    glossary: [
+                        ['Diafragma', 'Músculo em forma de cúpula abaixo dos pulmões, principal responsável pelos movimentos respiratórios.'],
+                        ['Inspiração', 'Entrada de ar: o diafragma contrai e desce, e o peito aumenta de volume.'],
+                        ['Expiração', 'Saída de ar: o diafragma relaxa e sobe, e o peito diminui de volume.'],
+                        ['Respiração celular', 'Processo em que as células usam o oxigênio para liberar a energia da glicose, produzindo CO₂ e água.']
+                    ],
+                    summary: 'O diafragma contrai (inspiração) e relaxa (expiração); o ar com CO₂ sai do corpo.'
+                }
+            ],
+            end: [{ x: 50, y: 36 }, { x: 50, y: 30 }, { x: 50, y: 21 }, { x: 50, y: 11 }, { x: 26, y: 6 }],
+            outro: 'O oxigênio está no sangue e o gás carbônico foi eliminado! Nas células, o oxigênio é usado para “queimar” a glicose e liberar a energia que usamos para crescer, pensar e brincar: é a <b>respiração celular</b>. Dela sobram gás carbônico e água.',
+            next: 'O digestório e o respiratório juntos garantem a <b>nutrição</b> do corpo. Mas como os nutrientes e o oxigênio chegam a cada célula, do cérebro ao dedão do pé? Com o <b>sistema circulatório</b>!'
+        };
+
+        missionsData.circulatorio = {
+            title: 'A Viagem da Hemácia',
+            traveler: { label: 'Sangue pobre em O₂', color: '#3b82f6' },
+            intro: 'Você é uma <b>hemácia</b> (glóbulo vermelho), a célula do sangue que transporta oxigênio. Vai dar uma volta completa: do corpo ao coração, do coração aos pulmões, de volta ao coração e daí para o corpo todo. Nos desenhos, o sangue pobre em oxigênio aparece em <span class="font-extrabold text-blue-600">azul</span> e o rico em oxigênio em <span class="font-extrabold text-red-600">vermelho</span> — mas, na verdade, o sangue é sempre vermelho (mais escuro quando tem pouco O₂).',
+            tracker: [
+                { key: 'o2', label: 'Oxigênio na hemácia', icon: '🔴', color: '#dc2626', start: 20 },
+                { key: 'entregas', label: 'Entregas às células', icon: '📦', color: '#16a34a' }
+            ],
+            start: { x: 43, y: 24 },
+            stations: [
+                {
+                    name: 'Átrio Direito', img: '9.png', pos: { x: 44, y: 35 },
+                    text: [
+                        'Você acabou de voltar do corpo pelas <b>veias cavas</b>, carregando pouco oxigênio e muito gás carbônico.',
+                        'O coração tem <b>4 cavidades</b>: 2 <b>átrios</b> (em cima), que recebem o sangue, e 2 <b>ventrículos</b> (embaixo), que bombeiam o sangue. O lado direito e o lado esquerdo não se misturam.',
+                        'Você entra no <b>átrio direito</b>. Mas antes de seguir, conheça seus colegas de viagem: o sangue não é feito só de hemácias!'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Complete a frase: o átrio direito...', actions: [
+                            { label: '...recebe o sangue que volta do corpo', icon: '📥', correct: true, msg: 'Isso! As veias cavas trazem o sangue de todo o corpo até o átrio direito.' },
+                            { label: '...recebe o sangue que vem dos pulmões', icon: '🫁', correct: false, msg: 'Esse é o átrio esquerdo, que recebe o sangue pelas veias pulmonares.' },
+                            { label: '...bombeia o sangue para o corpo todo', icon: '💪', correct: false, msg: 'Quem bombeia para o corpo todo é o ventrículo esquerdo.' }
+                        ]},
+                        { type: 'match', prompt: 'Conheça o sangue! Ligue cada componente à sua função:', pairs: [
+                            { item: '🔴 Hemácias', answer: 'Transportar oxigênio', msg: 'Isso! A hemoglobina das hemácias “agarra” o oxigênio.', hint: 'São os glóbulos vermelhos — você é uma delas!' },
+                            { item: '⚪ Leucócitos', answer: 'Defender o corpo', msg: 'Certo! Os glóbulos brancos combatem microrganismos.', hint: 'São os glóbulos brancos, os “soldados” do sangue.' },
+                            { item: '🟤 Plaquetas', answer: 'Fechar ferimentos', msg: 'Isso! Elas formam o “tampão” que estanca o sangramento (coagulação).', hint: 'Pense no que acontece quando você rala o joelho.' },
+                            { item: '💧 Plasma', answer: 'Levar nutrientes e resíduos', msg: 'Certo! O plasma é a parte líquida, feita principalmente de água.', hint: 'É a parte líquida do sangue.' }
+                        ]}
+                    ],
+                    fact: 'Uma única gota de sangue tem centenas de milhões de hemácias! Cada uma vive cerca de 120 dias e é produzida na medula, dentro dos ossos.',
+                    glossary: [
+                        ['Hemácias', 'Glóbulos vermelhos: células do sangue que transportam oxigênio, graças à hemoglobina.'],
+                        ['Leucócitos', 'Glóbulos brancos: células de defesa do corpo contra microrganismos.'],
+                        ['Plaquetas', 'Fragmentos de células que ajudam a fechar ferimentos (coagulação).'],
+                        ['Plasma', 'Parte líquida do sangue, que transporta nutrientes, hormônios e resíduos.'],
+                        ['Átrios', 'As duas cavidades superiores do coração, que recebem o sangue.'],
+                        ['Ventrículos', 'As duas cavidades inferiores do coração, que bombeiam o sangue.']
+                    ],
+                    summary: 'O sangue pobre em O₂ volta do corpo pelas veias cavas e entra no átrio direito.'
+                },
+                {
+                    name: 'Ventrículo Direito', img: '9.png', pos: { x: 47, y: 42 },
+                    text: [
+                        'Do átrio direito você passa por uma <b>valva</b> (a valva tricúspide) para o <b>ventrículo direito</b>. As valvas funcionam como portas que só abrem para um lado: o sangue nunca volta.',
+                        'O ventrículo direito se contrai e bombeia você para a <b>artéria pulmonar</b>, rumo aos pulmões.',
+                        'O “tum-tá” que ouvimos no coração é o som das valvas se fechando!'
+                    ],
+                    tasks: [
+                        { type: 'pump', prompt: 'Faça o coração bater! Toque no coração <b>8 vezes</b>, num ritmo constante, para bombear o sangue.', beats: 8 }
+                    ],
+                    fact: 'Em repouso, o coração de uma criança bate de 70 a 110 vezes por minuto; o de um adulto, de 60 a 100. Em um dia, são mais de 100 mil batimentos!',
+                    glossary: [
+                        ['Valvas cardíacas', 'Estruturas do coração que funcionam como portas de mão única, impedindo o sangue de voltar.'],
+                        ['Artérias', 'Vasos que levam o sangue do coração para os órgãos.'],
+                        ['Veias', 'Vasos que trazem o sangue dos órgãos de volta ao coração.']
+                    ],
+                    summary: 'O ventrículo direito bombeia o sangue pela artéria pulmonar até os pulmões.'
+                },
+                {
+                    name: 'Pulmões', img: '8.png', pos: { x: 35, y: 40 }, via: [{ x: 51, y: 33 }, { x: 43, y: 32 }],
+                    text: [
+                        'Nos pulmões, a artéria pulmonar se divide até formar <b>capilares</b> finíssimos em volta dos alvéolos.',
+                        'Aqui acontece a <b>hematose</b>, que você já conhece: você entrega o <b>gás carbônico</b> e recebe <b>oxigênio</b>. Agora o sangue fica vermelho-vivo!',
+                        'Esse caminho coração → pulmões → coração se chama <b>pequena circulação</b> (ou circulação pulmonar).'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que a hemácia faz nos pulmões? Encontre as 2 certas.', actions: [
+                            { label: 'Recebe oxigênio', icon: '🟥', correct: true, msg: 'Isso! A hemoglobina da hemácia se liga ao oxigênio.' },
+                            { label: 'Entrega o gás carbônico', icon: '🌫️', correct: true, msg: 'Certo! Ele sai do corpo na expiração.' },
+                            { label: 'Recebe nutrientes', icon: '🍞', correct: false, msg: 'Os nutrientes entram no sangue no intestino delgado.' },
+                            { label: 'Deixa a ureia', icon: '🚽', correct: false, msg: 'A ureia é retirada do sangue pelos rins.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Sangue rico em O₂', color: '#dc2626' }, tracker: { o2: 100 } },
+                    fact: 'A artéria pulmonar é a única artéria que leva sangue pobre em oxigênio — e as veias pulmonares são as únicas veias com sangue rico em oxigênio!',
+                    glossary: [
+                        ['Capilares', 'Vasos sanguíneos finíssimos onde acontecem as trocas entre o sangue e as células.'],
+                        ['Hemoglobina', 'Substância vermelha das hemácias que se liga ao oxigênio e o transporta.'],
+                        ['Pequena circulação', 'Caminho do sangue do coração aos pulmões e de volta ao coração, onde ele recebe O₂.']
+                    ],
+                    summary: 'Nos pulmões, o sangue deixa o CO₂ e recebe O₂ (pequena circulação).'
+                },
+                {
+                    name: 'Átrio Esquerdo', img: '9.png', pos: { x: 56, y: 35 }, via: [{ x: 45, y: 31 }],
+                    text: [
+                        'Cheia de oxigênio, você volta ao coração pelas <b>veias pulmonares</b> e chega ao <b>átrio esquerdo</b>.',
+                        'Daqui você passa por outra valva, a <b>valva mitral</b>, para o ventrículo esquerdo.',
+                        'Repare no desenho do coração: os vasos que passam por fora dele são as <b>artérias coronárias</b>. O coração também precisa de sangue para trabalhar!'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Por qual caminho a hemácia chegou ao átrio esquerdo?', actions: [
+                            { label: 'Pelas veias pulmonares', icon: '🫁', correct: true, msg: 'Isso! As veias pulmonares trazem o sangue oxigenado dos pulmões.' },
+                            { label: 'Pelas veias cavas', icon: '🔵', correct: false, msg: 'As veias cavas chegam ao átrio direito, trazendo sangue do corpo.' },
+                            { label: 'Pela aorta', icon: '🔴', correct: false, msg: 'A aorta sai do ventrículo esquerdo; ela não chega ao átrio.' }
+                        ]}
+                    ],
+                    fact: 'O coração trabalha sem parar a vida inteira. Quando uma artéria coronária entope, parte do músculo do coração fica sem oxigênio: é o infarto.',
+                    glossary: [
+                        ['Veias pulmonares', 'Veias que trazem o sangue rico em oxigênio dos pulmões ao átrio esquerdo.']
+                    ],
+                    summary: 'Pelas veias pulmonares, o sangue oxigenado chega ao átrio esquerdo.'
+                },
+                {
+                    name: 'Ventrículo Esquerdo', img: '9.png', pos: { x: 54, y: 43 },
+                    text: [
+                        'O <b>ventrículo esquerdo</b> é a cavidade mais forte do coração: sua parede muscular é bem mais grossa que a do direito.',
+                        'Com uma contração poderosa, ele lança você na <b>aorta</b>, a maior artéria do corpo, que se ramifica em artérias para todos os órgãos.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Por que a parede do ventrículo esquerdo é mais grossa?', actions: [
+                            { label: 'Porque bombeia o sangue para o corpo todo', icon: '💪', correct: true, msg: 'Isso! Para chegar da cabeça aos pés, é preciso muita força.' },
+                            { label: 'Porque recebe o sangue do corpo', icon: '📥', correct: false, msg: 'Quem recebe o sangue do corpo é o átrio direito.' },
+                            { label: 'Porque guarda o ar dos pulmões', icon: '🎈', correct: false, msg: 'O coração não guarda ar; ele só bombeia sangue.' }
+                        ]}
+                    ],
+                    fact: 'A aorta tem cerca de 2,5 cm de diâmetro — quase a largura de uma moeda de 1 real!',
+                    glossary: [
+                        ['Aorta', 'A maior artéria do corpo. Sai do ventrículo esquerdo e leva sangue rico em O₂ para todos os órgãos.'],
+                        ['Grande circulação', 'Caminho do sangue do coração para o corpo todo e de volta ao coração.']
+                    ],
+                    summary: 'O ventrículo esquerdo, o mais forte, lança o sangue na aorta.'
+                },
+                {
+                    name: 'Capilares do Corpo', emoji: '🧫', pos: { x: 50, y: 64 }, via: [{ x: 49, y: 29 }, { x: 55, y: 30 }, { x: 56, y: 52 }],
+                    text: [
+                        'A aorta se divide em artérias cada vez menores, até os <b>capilares</b>, vasos tão finos que as hemácias passam em fila, uma de cada vez.',
+                        'Nos capilares acontecem as trocas com as células: você entrega <b>oxigênio</b> e o plasma entrega os <b>nutrientes</b> absorvidos no intestino. Em troca, o sangue recolhe o <b>gás carbônico</b> e outros resíduos, como a <b>ureia</b>.',
+                        'Esse caminho coração → corpo → coração é a <b>grande circulação</b>. Pelas veias, você volta às veias cavas e ao átrio direito. E tudo recomeça!'
+                    ],
+                    tasks: [
+                        { type: 'match', prompt: 'Nos capilares, o que o sangue entrega e o que ele recolhe?', pairs: [
+                            { item: '🟥 Oxigênio', answer: 'Entrega às células', msg: 'Isso! As células usam o O₂ na respiração celular.', hint: 'As células precisam dele para liberar energia.' },
+                            { item: '🍞 Nutrientes', answer: 'Entrega às células', msg: 'Certo! Os nutrientes vieram do intestino delgado.', hint: 'Eles vieram do intestino para alimentar as células.' },
+                            { item: '🌫️ Gás carbônico', answer: 'Recolhe das células', msg: 'Isso! Ele será levado aos pulmões e expirado.', hint: 'É uma sobra da respiração celular.' },
+                            { item: '🧪 Ureia', answer: 'Recolhe das células', msg: 'Certo! Ela será retirada do sangue pelos rins.', hint: 'É um resíduo tóxico que precisa sair do corpo.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Sangue pobre em O₂', color: '#3b82f6' }, tracker: { o2: 20, entregas: 100 } },
+                    fact: 'Se todos os vasos sanguíneos de um adulto fossem colocados em fila, dariam mais de duas voltas na Terra — cerca de 100 mil quilômetros!',
+                    glossary: [
+                        ['Veias cavas', 'Grandes veias que trazem o sangue de todo o corpo de volta ao átrio direito.']
+                    ],
+                    summary: 'Nos capilares, o sangue entrega O₂ e nutrientes e recolhe CO₂ e ureia (grande circulação).'
+                }
+            ],
+            end: [{ x: 44, y: 55 }, { x: 43, y: 45 }, { x: 44, y: 35 }],
+            outro: 'Você completou uma volta inteira! Uma hemácia leva cerca de 1 minuto para percorrer todo o circuito. Resumo: <b>corpo → átrio direito → ventrículo direito → pulmões → átrio esquerdo → ventrículo esquerdo → aorta → corpo</b>. Um adulto tem cerca de 5 litros de sangue circulando assim, sem parar.',
+            next: 'O sangue recolheu resíduos das células, como a <b>ureia</b>, que é tóxica. Se ficassem acumulados, fariam mal ao corpo. Quem limpa o sangue? O <b>sistema excretor</b>!'
+        };
+
+        missionsData.excretor = {
+            title: 'A Missão Limpeza',
+            traveler: { label: 'Sangue com resíduos', color: '#b91c1c' },
+            intro: 'O sangue que passou pelas células está carregando <b>resíduos</b>: ureia, sais e água em excesso. Sua missão é guiá-lo pelos <b>rins</b>, separar o que é útil do que precisa sair e levar a <b>urina</b> até a saída do corpo.',
+            tracker: [
+                { key: 'residuos', label: 'Resíduos no sangue', icon: '☠️', color: '#a16207', start: 100 },
+                { key: 'bexiga', label: 'Urina na bexiga', icon: '💧', color: '#eab308' }
+            ],
+            start: { x: 50, y: 42 },
+            stations: [
+                {
+                    name: 'Artéria Renal', emoji: '🩸', pos: { x: 45, y: 53 },
+                    text: [
+                        'O sangue chega aos rins pela <b>artéria renal</b>. Ele traz resíduos produzidos pelas células: <b>ureia</b>, excesso de sais, excesso de água e outras substâncias.',
+                        'A <b>ureia</b> é produzida no <b>fígado</b>, a partir dos restos das proteínas. Ela é tóxica: se ficar acumulada, faz mal ao corpo.',
+                        'Eliminar os resíduos produzidos pelas células se chama <b>excreção</b>. Cerca de 1/5 de todo o sangue que o coração bombeia passa pelos rins!'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Quais destes são resíduos que precisam ser eliminados? Encontre os 3.', actions: [
+                            { label: 'Ureia', icon: '☠️', correct: true, msg: 'Isso! A ureia é o principal resíduo retirado pelos rins.' },
+                            { label: 'Excesso de sais', icon: '🧂', correct: true, msg: 'Certo! Sal demais no sangue faz mal, principalmente à pressão.' },
+                            { label: 'Excesso de água', icon: '💧', correct: true, msg: 'Isso! Os rins controlam a quantidade de água do corpo.' },
+                            { label: 'Glicose', icon: '🍬', correct: false, msg: 'A glicose é nutriente e fonte de energia: o corpo precisa dela!' },
+                            { label: 'Oxigênio', icon: '🫧', correct: false, msg: 'O oxigênio é essencial para as células.' }
+                        ]}
+                    ],
+                    fact: 'Por dia, os rins filtram cerca de 180 litros de líquido do sangue — mas produzem só 1 a 2 litros de urina. Quase tudo volta para o sangue!',
+                    glossary: [
+                        ['Excreção', 'Eliminação dos resíduos produzidos pelas células, como a ureia (na urina e no suor) e o CO₂ (pelos pulmões).'],
+                        ['Ureia', 'Resíduo tóxico produzido no fígado a partir dos restos das proteínas; é eliminado na urina.']
+                    ],
+                    summary: 'O sangue chega aos rins pela artéria renal, cheio de ureia e outros resíduos.'
+                },
+                {
+                    name: 'Néfron: Filtração', img: '10.png', pos: { x: 39, y: 53 },
+                    text: [
+                        'Cada rim tem cerca de <b>1 milhão de néfrons</b>: filtros microscópicos.',
+                        'No começo de cada néfron há um novelo de capilares, o <b>glomérulo</b>. A pressão do sangue empurra água e substâncias pequenas (ureia, sais, glicose, aminoácidos) para dentro do néfron: é a <b>filtração</b>.',
+                        'Coisas grandes, como as <b>hemácias</b> e as <b>proteínas</b> do sangue, não passam pelo filtro e continuam no sangue. Logo depois, o que é útil é devolvido ao sangue.'
+                    ],
+                    tasks: [
+                        { type: 'filter', prompt: 'Você é o néfron! Decida o destino de cada substância.',
+                          bins: { keep: '🩸 Fica no sangue', out: '🚽 Vai para a urina' },
+                          items: [
+                            { name: 'Ureia', emoji: '☠️', dest: 'out', msg: 'Ureia é resíduo tóxico: vai para a urina.' },
+                            { name: 'Glicose', emoji: '🍬', dest: 'keep', msg: 'A glicose é filtrada, mas volta toda para o sangue: é energia!' },
+                            { name: 'Hemácias', emoji: '🔴', dest: 'keep', msg: 'Hemácias são grandes demais para passar pelo filtro.' },
+                            { name: 'Excesso de sal', emoji: '🧂', dest: 'out', msg: 'O sal que sobra é eliminado na urina.' },
+                            { name: 'Proteínas do sangue', emoji: '🥚', dest: 'keep', msg: 'As proteínas são grandes demais para o filtro e ficam no sangue.' },
+                            { name: 'Água de que o corpo precisa', emoji: '🚰', dest: 'keep', msg: 'A maior parte da água volta para o sangue.' },
+                            { name: 'Excesso de água', emoji: '💧', dest: 'out', msg: 'A água que sobra forma a urina junto com os resíduos.' },
+                            { name: 'Aminoácidos', emoji: '🧩', dest: 'keep', msg: 'Aminoácidos são nutrientes: voltam para o sangue.' }
+                          ]
+                        }
+                    ],
+                    after: { token: { label: 'Filtrado', color: '#fde68a' }, tracker: { residuos: 40 } },
+                    fact: 'Se os néfrons de um rim fossem esticados e colocados em fila, formariam um tubo de dezenas de quilômetros!',
+                    glossary: [
+                        ['Néfron', 'Unidade microscópica de filtração do rim. Cada rim tem cerca de 1 milhão.'],
+                        ['Glomérulo', 'Novelo de capilares no início do néfron, onde o sangue é filtrado.'],
+                        ['Filtração', 'Passagem de água e substâncias pequenas do sangue para dentro do néfron.']
+                    ],
+                    summary: 'No glomérulo, o sangue é filtrado; hemácias e proteínas ficam no sangue.'
+                },
+                {
+                    name: 'Néfron: Reabsorção', img: '10.png', pos: { x: 40, y: 59 },
+                    text: [
+                        'O líquido filtrado percorre os <b>túbulos</b> do néfron, que são envolvidos por capilares.',
+                        'Tudo o que é útil — <b>glicose</b>, <b>aminoácidos</b>, sais necessários e cerca de <b>99% da água</b> — volta para o sangue. É a <b>reabsorção</b>.',
+                        'O que sobra — ureia, excesso de sais e de água — é a <b>urina</b>. Ela é recolhida no centro do rim, na <b>pelve renal</b>.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'O que acontece na reabsorção? Encontre as 2 certas.', actions: [
+                            { label: 'A glicose volta para o sangue', icon: '🍬', correct: true, msg: 'Isso! Em uma pessoa saudável, não há glicose na urina.' },
+                            { label: 'Quase toda a água volta para o sangue', icon: '🚰', correct: true, msg: 'Certo! Assim não perdemos água demais.' },
+                            { label: 'A ureia volta para o sangue', icon: '☠️', correct: false, msg: 'A ureia precisa sair! Ela segue para a urina.' },
+                            { label: 'As hemácias viram urina', icon: '🔴', correct: false, msg: 'As hemácias nem passam pelo filtro: ficam no sangue.' }
+                        ]}
+                    ],
+                    after: { token: { label: 'Urina', emoji: '💧', color: '#facc15' }, tracker: { residuos: 5 } },
+                    fact: 'Quando bebemos pouca água, um hormônio avisa os rins para devolver mais água ao sangue. Por isso a urina fica mais escura e concentrada.',
+                    glossary: [
+                        ['Reabsorção', 'Retorno ao sangue das substâncias úteis filtradas, como glicose, aminoácidos e a maior parte da água.'],
+                        ['Urina', 'Líquido formado nos rins com água, ureia e sais em excesso.']
+                    ],
+                    summary: 'O que é útil volta ao sangue (reabsorção); o que sobra forma a urina.'
+                },
+                {
+                    name: 'Ureteres', img: '10.png', pos: { x: 46, y: 67 }, via: [{ x: 45, y: 56 }],
+                    text: [
+                        'A urina sai de cada rim por um tubo fino de 25 a 30 cm: o <b>ureter</b>. Temos dois ureteres, um para cada rim.',
+                        'Assim como no esôfago, os músculos dos ureteres fazem <b>peristaltismo</b>, empurrando a urina gota a gota até a bexiga.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Para onde os ureteres levam a urina?', actions: [
+                            { label: 'Para a bexiga', icon: '🎈', correct: true, msg: 'Isso! A bexiga vai armazenar a urina.' },
+                            { label: 'Para o intestino', icon: '🌀', correct: false, msg: 'Urina e fezes seguem caminhos totalmente separados.' },
+                            { label: 'De volta para o coração', icon: '❤️', correct: false, msg: 'A urina não volta para o sangue: ela sai do corpo.' }
+                        ]}
+                    ],
+                    fact: 'A urina desce dos rins para a bexiga o tempo todo, dia e noite — mesmo enquanto dormimos!',
+                    glossary: [
+                        ['Ureteres', 'Dois tubos que levam a urina dos rins até a bexiga.']
+                    ],
+                    summary: 'Os ureteres levam a urina dos rins até a bexiga.'
+                },
+                {
+                    name: 'Bexiga Urinária', img: '11.png', pos: { x: 50, y: 76 }, via: [{ x: 46, y: 72 }],
+                    text: [
+                        'A <b>bexiga urinária</b> é uma bolsa muscular e elástica que <b>armazena</b> a urina.',
+                        'No adulto, ela guarda de 400 a 500 mL. Quando começa a encher, nervos na sua parede mandam uma mensagem ao <b>cérebro</b>: é a vontade de fazer xixi!',
+                        'Um anel muscular, o <b>esfíncter</b>, mantém a bexiga fechada até a hora certa.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Quais são as funções da bexiga? Encontre as 2 certas.', actions: [
+                            { label: 'Armazenar a urina', icon: '🎈', correct: true, msg: 'Isso! Ela se estica conforme enche.' },
+                            { label: 'Avisar o cérebro quando está enchendo', icon: '🧠', correct: true, msg: 'Certo! Os nervos da parede da bexiga mandam o sinal.' },
+                            { label: 'Produzir a urina', icon: '🏭', correct: false, msg: 'Quem produz a urina são os rins; a bexiga só armazena.' },
+                            { label: 'Filtrar o sangue', icon: '🫘', correct: false, msg: 'A filtração do sangue acontece nos néfrons dos rins.' }
+                        ]}
+                    ],
+                    after: { tracker: { bexiga: 100 } },
+                    fact: 'Não é bom segurar o xixi por muito tempo: esvaziar a bexiga regularmente ajuda a evitar infecções urinárias.',
+                    glossary: [
+                        ['Bexiga urinária', 'Bolsa muscular elástica que armazena a urina.'],
+                        ['Esfíncter', 'Anel muscular que abre e fecha uma passagem, como a saída da bexiga.']
+                    ],
+                    summary: 'A bexiga armazena a urina e avisa o cérebro quando está enchendo.'
+                },
+                {
+                    name: 'Uretra', emoji: '🚽', pos: { x: 50, y: 84 },
+                    text: [
+                        'Na hora de ir ao banheiro, o esfíncter relaxa, a parede da bexiga se contrai e a urina sai pela <b>uretra</b>: é a <b>micção</b>.',
+                        'A cor da urina é um bom sinal da hidratação: urina <b>amarelo-clara</b> indica que você está bebendo água suficiente; muito escura indica que o corpo precisa de mais água.',
+                        'Os rins não trabalham sozinhos: o <b>suor</b>, produzido pelas glândulas da pele, elimina água, sais e um pouco de ureia; e os <b>pulmões</b> eliminam o gás carbônico.'
+                    ],
+                    tasks: [
+                        { type: 'actions', prompt: 'Observe as cores. Qual urina indica que a pessoa está bem hidratada?', actions: [
+                            { label: 'Amarelo-clara', swatch: '#fef08a', correct: true, msg: 'Isso! Amarelo-clara é sinal de boa hidratação.' },
+                            { label: 'Amarelo-escura', swatch: '#eab308', correct: false, msg: 'Amarelo-escura indica que o corpo está economizando água: hora de beber mais!' },
+                            { label: 'Cor de chá / âmbar', swatch: '#b45309', correct: false, msg: 'Urina muito escura é sinal de desidratação. Beba água e, se continuar, procure um médico.' }
+                        ]},
+                        { type: 'actions', prompt: 'Além dos rins, que outros órgãos ajudam a eliminar resíduos? Encontre os 2.', actions: [
+                            { label: 'A pele, pelo suor', icon: '💦', correct: true, msg: 'Isso! O suor elimina água, sais e um pouco de ureia, e ainda resfria o corpo.' },
+                            { label: 'Os pulmões, pelo CO₂', icon: '🫁', correct: true, msg: 'Certo! Na expiração eliminamos o gás carbônico produzido pelas células.' },
+                            { label: 'O estômago', icon: '🫃', correct: false, msg: 'O estômago digere alimentos; não elimina resíduos das células.' }
+                        ]}
+                    ],
+                    after: { tracker: { bexiga: 0 } },
+                    fact: 'Uma pessoa adulta produz, em média, de 1 a 2 litros de urina por dia — e perde mais água ainda pelo suor e pela respiração nos dias quentes.',
+                    glossary: [
+                        ['Uretra', 'Canal que leva a urina da bexiga para fora do corpo.'],
+                        ['Micção', 'Eliminação da urina.'],
+                        ['Suor', 'Líquido produzido pelas glândulas sudoríparas da pele; elimina água, sais e um pouco de ureia.']
+                    ],
+                    summary: 'A urina sai pela uretra (micção); pele e pulmões também eliminam resíduos.'
+                }
+            ],
+            end: [{ x: 50, y: 93 }],
+            outro: 'Sangue limpo! Os rins retiraram os resíduos e mantiveram no corpo tudo o que é útil. Além de formar a urina, eles controlam a quantidade de água e de sais do organismo.',
+            next: 'Parabéns! Você fez os quatro sistemas trabalharem. Eles funcionam em equipe: o <b>digestório</b> fornece nutrientes, o <b>respiratório</b> fornece oxigênio, o <b>circulatório</b> leva tudo às células e recolhe os resíduos, e o <b>excretor</b> limpa o sangue.'
+        };
+
+        // ============================================================
+        //  FASE 2 — DESAFIO DO CONHECIMENTO (alinhado à BNCC EF05CI06/07)
+        //  A primeira opção é sempre a certa; a ordem é embaralhada no jogo.
+        // ============================================================
+        const quizData = [
+            { system: 'Digestório', color: 'orange', organName: 'Boca', img: '1.png',
+              question: 'Onde começa a digestão dos alimentos?',
+              options: ['Na boca, com a mastigação e a saliva', 'No estômago', 'No intestino grosso', 'No fígado'],
+              explain: 'Na boca acontece a digestão mecânica (dentes) e o início da digestão química do amido (amilase salivar).' },
+            { system: 'Digestório', color: 'orange', organName: 'Estômago', img: '3.png',
+              question: 'Qual é a principal função do estômago?',
+              options: ['Misturar o alimento com o suco gástrico e começar a digerir as proteínas', 'Absorver a maior parte dos nutrientes', 'Produzir a bile', 'Armazenar a urina'],
+              explain: 'O suco gástrico, com ácido clorídrico e pepsina, digere proteínas e transforma o bolo alimentar em quimo.' },
+            { system: 'Digestório', color: 'orange', organName: 'Fígado', img: '4.png',
+              question: 'Qual destas é uma função do fígado na digestão?',
+              options: ['Produzir a bile, que quebra a gordura em gotinhas', 'Bombear o sangue pelo corpo', 'Produzir a saliva', 'Fazer as trocas gasosas'],
+              explain: 'A bile funciona como um detergente: emulsifica as gorduras. Ela fica guardada na vesícula biliar.' },
+            { system: 'Digestório', color: 'orange', organName: 'Intestino Delgado', img: '5.png',
+              question: 'O que acontece principalmente no intestino delgado?',
+              options: ['Os nutrientes são absorvidos pelas vilosidades e passam para o sangue', 'Os alimentos são mastigados', 'O ar é separado da comida', 'A urina é produzida'],
+              explain: 'As vilosidades aumentam a área de contato, e a glicose, os aminoácidos e outros nutrientes entram no sangue.' },
+            { system: 'Digestório', color: 'orange', organName: 'Intestino Grosso', img: '5.png',
+              question: 'Qual é a principal função do intestino grosso?',
+              options: ['Absorver a água que sobrou e formar as fezes', 'Digerir as proteínas', 'Produzir o suco gástrico', 'Filtrar o sangue'],
+              explain: 'No intestino grosso, a água é absorvida e a microbiota fermenta as fibras; os restos formam as fezes.' },
+            { system: 'Digestório', color: 'orange', organName: 'Esôfago', img: '2.png',
+              question: 'Por que não é bom falar enquanto engolimos?',
+              options: ['Porque a epiglote precisa fechar a laringe para o alimento não ir para o caminho do ar', 'Porque os dentes param de funcionar', 'Porque o estômago se fecha', 'Porque o coração para de bater'],
+              explain: 'A faringe é um cruzamento de ar e alimento. Ao engolir, a epiglote fecha a laringe; se falamos, ela pode abrir e engasgamos.' },
+            { system: 'Respiratório', color: 'sky', organName: 'Traqueia', img: '7.png',
+              question: 'O que mantém a traqueia sempre aberta?',
+              options: ['Anéis de cartilagem em forma de “C”', 'O ar que está dentro dela', 'Os músculos do estômago', 'A saliva'],
+              explain: 'Os anéis de cartilagem impedem que a traqueia se feche. Por dentro, cílios e muco a mantêm limpa.' },
+            { system: 'Respiratório', color: 'sky', organName: 'Pulmões', img: '8.png',
+              question: 'Onde acontecem as trocas gasosas (hematose)?',
+              options: ['Nos alvéolos pulmonares', 'Na traqueia', 'No nariz', 'No coração'],
+              explain: 'Nos alvéolos, o O₂ passa para o sangue e o CO₂ passa do sangue para o ar, por difusão.' },
+            { system: 'Respiratório', color: 'sky', organName: 'Diafragma', emoji: '🫁',
+              question: 'O que acontece na inspiração?',
+              options: ['O diafragma contrai e desce, e o ar entra', 'O diafragma relaxa e sobe, e o ar entra', 'O coração enche os pulmões de ar', 'O estômago empurra o ar'],
+              explain: 'Quando o diafragma desce, o peito aumenta de volume e o ar entra. Na expiração, ele relaxa e sobe.' },
+            { system: 'Circulatório', color: 'red', organName: 'Coração', img: '9.png',
+              question: 'Por que o ventrículo esquerdo tem a parede mais grossa?',
+              options: ['Porque bombeia o sangue para o corpo todo', 'Porque recebe o ar dos pulmões', 'Porque guarda os nutrientes', 'Porque produz as hemácias'],
+              explain: 'O ventrículo esquerdo lança o sangue na aorta com força suficiente para chegar da cabeça aos pés.' },
+            { system: 'Circulatório', color: 'red', organName: 'Coração', img: '9.png',
+              question: 'Qual é o caminho do sangue na pequena circulação?',
+              options: ['Coração → pulmões → coração', 'Coração → rins → coração', 'Pulmões → estômago → pulmões', 'Coração → intestino → bexiga'],
+              explain: 'Na pequena circulação, o sangue vai aos pulmões para trocar CO₂ por O₂ e volta ao coração.' },
+            { system: 'Circulatório', color: 'red', organName: 'Sangue', emoji: '🩸',
+              question: 'Qual componente do sangue transporta o oxigênio?',
+              options: ['As hemácias (glóbulos vermelhos)', 'As plaquetas', 'Os leucócitos (glóbulos brancos)', 'A bile'],
+              explain: 'As hemácias têm hemoglobina, que se liga ao O₂. Leucócitos defendem o corpo e plaquetas ajudam na coagulação.' },
+            { system: 'Excretor', color: 'yellow', organName: 'Rins', img: '10.png',
+              question: 'O que os rins fazem?',
+              options: ['Filtram o sangue, retiram resíduos como a ureia e formam a urina', 'Digerem as gorduras', 'Trocam gases com o ar', 'Bombeiam o sangue'],
+              explain: 'Nos néfrons, o sangue é filtrado; o que é útil volta para o sangue e o resto forma a urina.' },
+            { system: 'Excretor', color: 'yellow', organName: 'Bexiga', img: '11.png',
+              question: 'Qual é o caminho da urina no corpo?',
+              options: ['Rins → ureteres → bexiga → uretra', 'Bexiga → rins → uretra → ureteres', 'Rins → uretra → bexiga → ureteres', 'Ureteres → rins → bexiga → uretra'],
+              explain: 'A urina é formada nos rins, desce pelos ureteres, fica na bexiga e sai pela uretra.' },
+            { system: 'Integração', color: 'emerald', organName: 'Trabalho em equipe', emoji: '🔗',
+              question: 'Como os nutrientes absorvidos no intestino chegam às células do pé?',
+              options: ['Pelo sangue, transportados pelo sistema circulatório', 'Pelo ar que respiramos', 'Pela urina', 'Pelos ossos'],
+              explain: 'Os nutrientes entram no sangue no intestino delgado e são levados pelas artérias até os capilares de todo o corpo.' },
+            { system: 'Integração', color: 'emerald', organName: 'Trabalho em equipe', emoji: '⚡',
+              question: 'Para que as células usam o oxigênio?',
+              options: ['Para liberar a energia dos nutrientes (respiração celular)', 'Para produzir a bile', 'Para formar as fezes', 'Para filtrar a urina'],
+              explain: 'Na respiração celular, a glicose reage com o O₂ e libera energia, produzindo CO₂ e água.' },
+            { system: 'Integração', color: 'emerald', organName: 'Excreção x Egestão', emoji: '🧐',
+              question: 'Qual destas é uma EXCREÇÃO (eliminação de resíduos produzidos pelas células)?',
+              options: ['A urina, com a ureia filtrada do sangue', 'As fezes, com restos não digeridos', 'A saliva', 'O suco gástrico'],
+              explain: 'As fezes são restos que nem entraram nas células (egestão). A urina, o suor e o CO₂ expirado são excreções.' }
+        ];
+
+        // ============================================================
+        //  FASE 3 — O CORPO EM AÇÃO
+        // ============================================================
+        const bodySystems = [
+            { gameIndex: 1, label: 'Respirar', title: 'Sistema Respiratório', icon: '🫁', color: 'sky',
+              animate: ['pulmoes'], anim: 'anim-breathe', particles: ['air'],
+              caption: '<p>Inspira... expira...</p><ul class="p3-list"><li><b>Inspiração:</b> o diafragma contrai e desce; o ar entra pelo nariz, laringe, traqueia e brônquios até os alvéolos.</li><li><b>Hematose:</b> nos alvéolos, o O₂ entra no sangue e o CO₂ sai.</li><li><b>Expiração:</b> o diafragma relaxa e sobe, e o ar com CO₂ sai do corpo.</li></ul>' },
+            { gameIndex: 2, label: 'Bater', title: 'Sistema Circulatório', icon: '🫀', color: 'red',
+              animate: ['coracao'], anim: 'anim-beat', particles: ['blood'],
+              caption: '<p>Tum-tá, tum-tá!</p><ul class="p3-list"><li>O lado <b>direito</b> do coração manda o sangue pobre em O₂ para os pulmões (pequena circulação).</li><li>O lado <b>esquerdo</b> manda o sangue rico em O₂ para o corpo todo pela aorta (grande circulação).</li><li>Nos <b>capilares</b>, o sangue entrega O₂ e nutrientes e recolhe CO₂ e ureia.</li></ul>' },
+            { gameIndex: 0, label: 'Digerir', title: 'Sistema Digestório', icon: '🍔', color: 'orange',
+              animate: ['estomago', 'intestinos'], anim: 'anim-digest', particles: ['food'],
+              caption: '<p>Movimentos peristálticos em ação!</p><ul class="p3-list"><li><b>Boca:</b> mastigação e saliva (início da digestão do amido).</li><li><b>Estômago:</b> suco gástrico digere proteínas → quimo.</li><li><b>Intestino delgado:</b> bile e suco pancreático; nutrientes absorvidos para o sangue.</li><li><b>Intestino grosso:</b> absorção de água e formação das fezes.</li></ul>' },
+            { gameIndex: 3, label: 'Filtrar', title: 'Sistema Excretor', icon: '💧', color: 'yellow',
+              animate: ['rins'], anim: 'anim-filter', particles: ['water'],
+              caption: '<p>Limpeza sem parar!</p><ul class="p3-list"><li>Nos <b>néfrons</b> dos rins, o sangue é filtrado e o que é útil volta para ele.</li><li>A <b>urina</b> (água + ureia + sais em excesso) desce pelos <b>ureteres</b>.</li><li>A <b>bexiga</b> armazena a urina até a micção, pela <b>uretra</b>.</li></ul>' },
+            { gameIndex: 'all', label: 'Tudo junto', title: 'Os 4 sistemas em equipe', icon: '🔗', color: 'emerald',
+              animate: ['pulmoes', 'coracao', 'estomago', 'intestinos', 'rins'], particles: ['air', 'blood', 'food', 'water'],
+              caption: '<p><b>Nutrição é trabalho em equipe!</b></p><ul class="p3-list"><li>🍔 O <b>digestório</b> fornece os nutrientes.</li><li>💨 O <b>respiratório</b> fornece o oxigênio e elimina o CO₂.</li><li>🩸 O <b>circulatório</b> leva nutrientes e O₂ a todas as células e recolhe os resíduos.</li><li>💧 O <b>excretor</b> retira a ureia e o excesso de água e sais do sangue.</li></ul>' }
+        ];
+        const ORGAN_ANIM = { pulmoes: 'anim-breathe', coracao: 'anim-beat', estomago: 'anim-digest', intestinos: 'anim-digest', rins: 'anim-filter' };
+        const P3_PARTICLES = {
+            air:   { colors: ['#38bdf8', '#bae6fd'], xMin: 33, xMax: 67, y0: 46, y1: 15, sMin: 6, sMax: 12 },
+            blood: { colors: ['#ef4444', '#f87171', '#3b82f6'], xMin: 40, xMax: 60, y0: 34, y1: 72, sMin: 5, sMax: 9 },
+            food:  { colors: ['#b45309', '#d97706'], xMin: 40, xMax: 60, y0: 40, y1: 76, sMin: 6, sMax: 10 },
+            water: { colors: ['#f59e0b', '#fcd34d'], xMin: 42, xMax: 58, y0: 50, y1: 82, sMin: 5, sMax: 9 }
+        };
+
+        // ============================================================
+        //  FASE 4 — JOGO DA MEMÓRIA
+        // ============================================================
+        const MEM_ORGANS = [
+            { key: 'boca',       label: 'Boca',       src: '1.png',  color: 'rose',   fact: 'Boca: início da digestão mecânica e química.' },
+            { key: 'esofago',    label: 'Esôfago',    src: '2.png',  color: 'orange', fact: 'Esôfago: leva o bolo alimentar ao estômago por peristaltismo.' },
+            { key: 'estomago',   label: 'Estômago',   src: '3.png',  color: 'orange', fact: 'Estômago: suco gástrico digere as proteínas e forma o quimo.' },
+            { key: 'figado',     label: 'Fígado',     src: '4.png',  color: 'red',    fact: 'Fígado: produz a bile e a ureia.' },
+            { key: 'intestinos', label: 'Intestinos', src: '5.png',  color: 'amber',  fact: 'Intestinos: absorção dos nutrientes (delgado) e da água (grosso).' },
+            { key: 'traqueia',   label: 'Traqueia',   src: '7.png',  color: 'cyan',   fact: 'Traqueia: tubo de ar com anéis de cartilagem.' },
+            { key: 'pulmoes',    label: 'Pulmões',    src: '8.png',  color: 'sky',    fact: 'Pulmões: trocas gasosas nos alvéolos (hematose).' },
+            { key: 'coracao',    label: 'Coração',    src: '9.png',  color: 'rose',   fact: 'Coração: bomba com 2 átrios e 2 ventrículos.' },
+            { key: 'rins',       label: 'Rins',       src: '10.png', color: 'purple', fact: 'Rins: filtram o sangue nos néfrons e formam a urina.' },
+            { key: 'bexiga',     label: 'Bexiga',     src: '11.png', color: 'yellow', fact: 'Bexiga: armazena a urina até a micção.' }
+        ];
+
+        // ============================================================
+        //  UTILITÁRIOS
+        // ============================================================
+        const $ = id => document.getElementById(id);
+        const rand = (a, b) => a + Math.random() * (b - a);
+        function shuffle(arr) {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        const SCREENS = ['start-screen', 'game-ui', 'mission-screen', 'quiz-screen', 'phase3-screen', 'phase4-screen', 'final-screen'];
+        function showScreen(id) {
+            SCREENS.forEach(s => {
+                const el = $(s);
+                if (s === id) { el.classList.remove('hidden'); el.classList.add('flex'); el.scrollTop = 0; }
+                else { el.classList.add('hidden'); el.classList.remove('flex'); }
+            });
+        }
+
+        let toastTimer = null;
+        function toast(msg, ms = 2600) {
+            const t = $('g-toast');
+            t.innerHTML = msg;
+            t.style.opacity = '1';
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.style.opacity = '0', ms);
+        }
+
+        // Modal genérico
+        function showModal({ icon, title, text, btn, btnClass, onClick }) {
+            $('modal-icon').textContent = icon;
+            $('modal-title').textContent = title;
+            $('modal-text').innerHTML = text;
+            const b = $('modal-btn');
+            b.textContent = btn;
+            b.className = `w-full ${btnClass} text-white font-bold py-3 px-6 rounded-xl shadow-md transition`;
+            b.onclick = () => { hideModal(); onClick(); };
+            $('level-modal').classList.remove('hidden');
+            $('level-modal').classList.add('flex');
+        }
+        function hideModal() {
+            $('level-modal').classList.add('hidden');
+            $('level-modal').classList.remove('flex');
+        }
+
+        // Efeitos sonoros simples (Web Audio, sem arquivos)
+        const Sound = {
+            on: true, ctx: null,
+            toggle() { this.on = !this.on; $('btn-sound').textContent = this.on ? '🔊' : '🔇'; },
+            tone(f, start, dur, type = 'sine', vol = 0.07) {
+                const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+                o.type = type; o.frequency.value = f;
+                g.gain.setValueAtTime(vol, c.currentTime + start);
+                g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + start + dur);
+                o.connect(g).connect(c.destination);
+                o.start(c.currentTime + start); o.stop(c.currentTime + start + dur + 0.02);
+            },
+            play(kind) {
+                if (!this.on) return;
+                try {
+                    this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+                    if (this.ctx.state === 'suspended') this.ctx.resume();
+                    const seq = {
+                        ok:   [[660, 0, .12], [880, .1, .16]],
+                        bad:  [[200, 0, .22, 'square', .035]],
+                        done: [[523, 0, .15], [659, .12, .15], [784, .24, .28]],
+                        beat: [[85, 0, .13, 'sine', .3], [70, .17, .12, 'sine', .22]],
+                        pop:  [[520, 0, .08]],
+                        win:  [[523, 0, .15], [659, .15, .15], [784, .3, .15], [1047, .45, .4]]
+                    }[kind] || [];
+                    seq.forEach(([f, s, d, t, v]) => this.tone(f, s, d, t, v));
+                } catch (e) { /* sem áudio disponível */ }
+            }
+        };
+
+        // Estatísticas da partida
+        let stats;
+        function resetStats() {
+            stats = { buildErrors: 0, missions: {}, quizScore: 0, memMoves: 0, glossary: new Map() };
+            updateNbCount();
+        }
+
+        // Cria a imagem de um órgão já posicionado no corpo
+        function makeOrganEl(o, extra = '') {
+            const el = document.createElement('div');
+            el.className = 'placed-organ ' + extra;
+            el.style.top = o.placedTop || o.top;
+            el.style.left = o.placedLeft || o.left;
+            el.style.width = o.placedWidth || o.width;
+            el.style.height = o.placedHeight || o.height;
+            el.style.zIndex = o.z;
+            el.dataset.id = o.id;
+            el.innerHTML = `<img src="${o.src}" alt="${o.name}">`;
+            return el;
+        }
+
+        // ============================================================
+        //  FASE 1 — MONTAGEM (arrastar os órgãos)
+        // ============================================================
+        let currentLevel = 0;
+        let placedInCurrentLevel = 0;
+        let draggedElement = null;
+        let ghostElement = null;
+        let isDragging = false;
+
+        const bodyMap = $('body-map');
+        const inventory = $('inventory');
+        const feedbackToast = $('feedback-toast');
+
+        function startGame() {
+            resetStats();
+            currentLevel = 0;
+            bodyMap.innerHTML = '';
+            showScreen('game-ui');
+            loadLevel(currentLevel);
+        }
+
+        function loadLevel(levelIndex) {
+            placedInCurrentLevel = 0;
+            const levelData = gameData[levelIndex];
+
+            $('system-step').textContent = `Fase 1 · Sistema ${levelIndex + 1} de ${gameData.length} · Montagem`;
+            $('system-step').className = `text-xs font-extrabold uppercase tracking-wider text-${levelData.color}-500`;
+            $('system-title').textContent = `${levelData.icon} ${levelData.name}`;
+            $('system-desc').textContent = levelData.desc;
+            updateOrganCount();
+            $('organ-fact').innerHTML = '🔎 Ao encaixar um órgão, a <b>ficha</b> dele aparece aqui.';
+            $('organ-fact').className = 'rounded-2xl bg-slate-50 border border-slate-100 p-3 text-sm text-slate-500';
+
+            gameData.forEach((g, i) => {
+                $(`dot-${i}`).className = `w-4 h-4 rounded-full shadow-inner transition-colors ${i === levelIndex ? 'bg-' + g.color + '-500 ring-2 ring-' + g.color + '-200' : (i < levelIndex ? 'bg-' + g.color + '-300' : 'bg-slate-200')}`;
+            });
+
+            // Sistemas anteriores ficam transparentes
+            bodyMap.querySelectorAll('.placed-organ').forEach(org => org.classList.add('previous-system'));
+            bodyMap.querySelectorAll('.dropzone').forEach(dz => dz.remove());
+            inventory.innerHTML = '';
+
+            shuffle(levelData.organs).forEach(organ => {
+                const dropzone = document.createElement('div');
+                dropzone.className = `dropzone active border-${levelData.color}-400 text-${levelData.color}-700`;
+                dropzone.style.top = organ.top;
+                dropzone.style.left = organ.left;
+                dropzone.style.width = organ.width;
+                dropzone.style.height = organ.height;
+                dropzone.style.zIndex = organ.z;
+                dropzone.dataset.id = organ.id;
+                dropzone.innerHTML = `<span class="opacity-40 text-xs font-bold">?</span>`;
+                bodyMap.appendChild(dropzone);
+
+                const item = document.createElement('div');
+                item.className = `organ-item bg-white border-2 border-${levelData.color}-200 rounded-xl p-2 md:p-3 flex items-center gap-2 md:gap-3 hover:bg-${levelData.color}-50 shadow-sm`;
+                item.dataset.id = organ.id;
+                item.dataset.hint = organ.hint;
+                item.dataset.name = organ.name;
+                item.innerHTML = `
+                    <div class="bg-${levelData.color}-100 w-12 h-12 md:w-14 md:h-14 rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
+                        <img src="${organ.src}" alt="${organ.name}" class="w-10 h-10 object-contain drop-shadow-md pointer-events-none">
+                    </div>
+                    <div class="font-bold text-slate-700 leading-tight flex-1 text-sm md:text-base">${organ.name}</div>
+                    <div class="text-slate-300 hidden md:block">⋮⋮</div>`;
+                item.addEventListener('pointerdown', handlePointerDown);
+                inventory.appendChild(item);
+            });
+        }
+
+        function updateOrganCount() {
+            $('organ-count').textContent = `${placedInCurrentLevel}/${gameData[currentLevel].organs.length} órgãos`;
+        }
+
+        // --- Arrastar (mouse e toque) ---
+        function handlePointerDown(e) {
+            if (e.button !== 0) return;
+            draggedElement = e.currentTarget;
+            isDragging = true;
+
+            ghostElement = draggedElement.cloneNode(true);
+            ghostElement.className = 'drag-ghost bg-white border-2 border-blue-400 rounded-xl p-3 flex items-center gap-3 shadow-2xl';
+            document.body.appendChild(ghostElement);
+            moveGhost(e.clientX, e.clientY);
+            draggedElement.style.opacity = '0.3';
+
+            document.addEventListener('pointermove', handlePointerMove);
+            document.addEventListener('pointerup', handlePointerUp);
+            document.addEventListener('pointercancel', cancelDrag);
+            document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        }
+
+        function moveGhost(x, y) {
+            if (!ghostElement) return;
+            ghostElement.style.left = `${x}px`;
+            ghostElement.style.top = `${y}px`;
+            document.querySelectorAll('.dropzone').forEach(dz => dz.classList.remove('hovered'));
+            ghostElement.style.display = 'none';
+            const below = document.elementFromPoint(x, y);
+            ghostElement.style.display = 'flex';
+            const dz = below && below.closest('.dropzone');
+            if (dz) dz.classList.add('hovered');
+        }
+
+        function handlePointerMove(e) { if (isDragging) moveGhost(e.clientX, e.clientY); }
+        function handleTouchMove(e) { if (isDragging) e.preventDefault(); }
+
+        function removeDragListeners() {
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
+            document.removeEventListener('pointercancel', cancelDrag);
+            document.removeEventListener('touchmove', handleTouchMove);
+        }
+
+        function cancelDrag() {
+            removeDragListeners();
+            if (draggedElement) draggedElement.style.opacity = '1';
+            if (ghostElement) ghostElement.remove();
+            ghostElement = null; draggedElement = null; isDragging = false;
+            document.querySelectorAll('.dropzone').forEach(dz => dz.classList.remove('hovered'));
+        }
+
+        function handlePointerUp(e) {
+            if (!isDragging) return;
+            removeDragListeners();
+            ghostElement.style.display = 'none';
+            const below = document.elementFromPoint(e.clientX, e.clientY);
+            let dropSuccess = false;
+            const dropzone = below && below.closest('.dropzone');
+
+            if (dropzone && dropzone.dataset.id === draggedElement.dataset.id) {
+                dropSuccess = true;
+                placeOrgan(dropzone, draggedElement);
+            } else if (dropzone) {
+                stats.buildErrors++;
+                Sound.play('bad');
+                showBuildToast(`Opa! ${draggedElement.dataset.name} não fica aqui. Dica: ${draggedElement.dataset.hint}`, 'error');
+            }
+
+            if (!dropSuccess && draggedElement) {
+                const el = draggedElement;
+                el.style.opacity = '1';
+                el.classList.add('error-shake');
+                setTimeout(() => el.classList.remove('error-shake'), 400);
+            }
+            if (ghostElement) ghostElement.remove();
+            ghostElement = null; draggedElement = null; isDragging = false;
+            document.querySelectorAll('.dropzone').forEach(dz => dz.classList.remove('hovered'));
+        }
+
+        function placeOrgan(dropzone, inventoryItem) {
+            const levelData = gameData[currentLevel];
+            const organData = levelData.organs.find(o => o.id === inventoryItem.dataset.id);
+            inventoryItem.remove();
+
+            const organEl = makeOrganEl(organData);
+            dropzone.replaceWith(organEl);
+
+            Sound.play('ok');
+            showBuildToast(`Boa! ${organData.name} no lugar certo!`, 'success');
+            $('organ-fact').className = `rounded-2xl bg-${levelData.color}-50 border border-${levelData.color}-200 p-3 text-sm text-slate-600 fade-up`;
+            $('organ-fact').innerHTML = `
+                <div class="flex items-center gap-2 mb-1">
+                    <img src="${organData.src}" alt="" class="w-9 h-9 object-contain">
+                    <b class="text-${levelData.color}-700 text-base">Ficha: ${organData.name}</b>
+                </div>${organData.fact}`;
+
+            placedInCurrentLevel++;
+            updateOrganCount();
+            if (placedInCurrentLevel === levelData.organs.length) setTimeout(showLevelComplete, 900);
+        }
+
+        function showBuildToast(msg, type) {
+            feedbackToast.textContent = msg;
+            feedbackToast.className = `absolute top-6 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-xl shadow-xl font-bold text-sm transition-opacity duration-300 pointer-events-none z-50 text-center w-72 border-2 ${
+                type === 'success' ? 'bg-green-100 text-green-700 border-green-400' : 'bg-red-100 text-red-700 border-red-400'}`;
+            feedbackToast.style.opacity = '1';
+            clearTimeout(showBuildToast.t);
+            showBuildToast.t = setTimeout(() => feedbackToast.style.opacity = '0', 3200);
+        }
+
+        function showLevelComplete() {
+            const levelData = gameData[currentLevel];
+            const m = missionsData[levelData.id];
+            Sound.play('done');
+            showModal({
+                icon: levelData.icon,
+                title: `${levelData.name} montado!`,
+                text: `Todos os órgãos estão no lugar. Agora é hora de fazer o sistema <b>trabalhar</b>: comece a missão <b>“${m.title}”</b>!`,
+                btn: 'Começar a missão 🚀',
+                btnClass: `bg-${levelData.color}-500 hover:bg-${levelData.color}-600`,
+                onClick: () => startMission(currentLevel)
+            });
+        }
+
+        // ============================================================
+        //  FASE 1 — MISSÕES: o trabalho de cada sistema
+        // ============================================================
+        let mState = null;
+        const curStation = () => mState.m.stations[mState.idx];
+
+        function startMission(levelIndex) {
+            const sys = gameData[levelIndex];
+            const m = missionsData[sys.id];
+            const tracker = {};
+            m.tracker.forEach(t => tracker[t.key] = t.start || 0);
+            mState = { sysIndex: levelIndex, sys, m, idx: -1, taskIdx: 0, errors: 0, tracker, look: { ...m.traveler }, stationDone: false };
+
+            $('m-kicker').textContent = `Fase 1 · Sistema ${levelIndex + 1} de ${gameData.length} · Missão`;
+            $('m-kicker').className = `text-xs font-extrabold uppercase tracking-wider text-${sys.color}-500`;
+            $('m-title').textContent = `${sys.icon} ${m.title}`;
+            $('m-sub').textContent = `${sys.name} em funcionamento — siga o caminho numerado no corpo.`;
+            $('m-body').style.setProperty('--sys', sys.hex);
+            showScreen('mission-screen');
+            renderMissionBody();
+            renderTracker();
+            updateMissionHud();
+            renderMissionIntro();
+        }
+
+        // Todos os pontos do caminho, e o índice do ponto de cada estação
+        function pathPoints() {
+            const pts = [mState.m.start];
+            const stationIdx = [];
+            mState.m.stations.forEach(s => {
+                (s.via || []).forEach(p => pts.push(p));
+                pts.push(s.pos);
+                stationIdx.push(pts.length - 1);
+            });
+            return { pts, stationIdx };
+        }
+        const ptsToStr = pts => pts.map(p => `${p.x},${p.y}`).join(' ');
+
+        function renderMissionBody() {
+            const { sys, m } = mState;
+            const body = $('m-body');
+            body.innerHTML = '';
+            for (let i = 0; i <= mState.sysIndex; i++) {
+                gameData[i].organs.forEach(o => body.appendChild(makeOrganEl(o, i < mState.sysIndex ? 'previous-system' : '')));
+            }
+            const { pts } = pathPoints();
+            body.insertAdjacentHTML('beforeend', `
+                <svg class="m-path" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polyline points="${ptsToStr(pts)}" fill="none" stroke="#334155" stroke-opacity=".45" stroke-width="2.5" stroke-dasharray="5 5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+                    <polyline id="m-path-done" points="" fill="none" stroke="${sys.hex}" stroke-width="4.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>`);
+            m.stations.forEach((s, i) => {
+                const mk = document.createElement('div');
+                mk.className = 'm-marker';
+                mk.id = 'm-mk-' + i;
+                mk.style.left = s.pos.x + '%';
+                mk.style.top = s.pos.y + '%';
+                mk.textContent = i + 1;
+                mk.title = s.name;
+                body.appendChild(mk);
+            });
+            body.insertAdjacentHTML('beforeend', `<div id="m-token" class="m-token" style="left:${m.start.x}%;top:${m.start.y}%"><div class="blob"></div><div class="lbl"></div></div>`);
+            applyLook();
+        }
+
+        function applyLook() {
+            const tok = $('m-token');
+            if (!tok) return;
+            const blob = tok.querySelector('.blob');
+            blob.style.backgroundColor = mState.look.color;
+            blob.style.borderRadius = mState.look.emoji ? '50%' : '46% 54% 50% 50% / 55% 45% 55% 45%';
+            blob.textContent = mState.look.emoji || '';
+            tok.querySelector('.lbl').textContent = mState.look.label;
+            const chip = $('m-chip');
+            if (chip) chip.innerHTML = lookChip();
+        }
+        const lookChip = () => `<span class="inline-block w-3 h-3 rounded-full align-middle mr-1" style="background:${mState.look.color}"></span>${mState.look.emoji || ''} ${mState.look.label}`;
+
+        function bumpToken() {
+            const tok = $('m-token');
+            if (!tok) return;
+            tok.classList.remove('bump'); void tok.offsetWidth; tok.classList.add('bump');
+        }
+
+        function moveTokenThrough(points, done) {
+            const tok = $('m-token');
+            let i = 0;
+            const step = () => {
+                if (i >= points.length) { if (done) done(); return; }
+                const p = points[i++];
+                tok.style.left = p.x + '%';
+                tok.style.top = p.y + '%';
+                setTimeout(step, 720);
+            };
+            step();
+        }
+
+        function updateMarkers() {
+            mState.m.stations.forEach((s, i) => {
+                const mk = $('m-mk-' + i);
+                const done = i < mState.idx || (i === mState.idx && mState.stationDone);
+                mk.className = 'm-marker' + (done ? ' done' : (i === mState.idx ? ' current' : ''));
+                mk.textContent = done ? '✓' : i + 1;
+            });
+        }
+
+        function updatePath(uptoStation) {
+            const { pts, stationIdx } = pathPoints();
+            const last = uptoStation < 0 ? 0 : stationIdx[uptoStation];
+            $('m-path-done').setAttribute('points', ptsToStr(pts.slice(0, last + 1)));
+        }
+
+        function renderTracker() {
+            $('m-tracker').innerHTML = `<div class="text-[0.65rem] font-extrabold uppercase tracking-wider text-slate-400">📊 Acompanhe a viagem</div>` +
+                mState.m.tracker.map(t => {
+                    const v = mState.tracker[t.key];
+                    return `<div class="flex items-center gap-2 text-xs font-bold text-slate-600">
+                        <span class="text-base w-5 text-center">${t.icon}</span>
+                        <div class="flex-1"><div class="flex justify-between"><span>${t.label}</span><span>${v}%</span></div>
+                        <div class="trk-bar"><div class="trk-fill" style="width:${v}%;background:${t.color}"></div></div></div>
+                    </div>`;
+                }).join('');
+        }
+
+        function updateMissionHud() {
+            const n = mState.m.stations.length;
+            const done = mState.idx < 0 ? 0 : mState.idx + (mState.stationDone ? 1 : 0);
+            $('m-step').textContent = `${done}/${n}`;
+            $('m-errors').textContent = mState.errors;
+        }
+
+        function renderMissionIntro() {
+            const { m, sys } = mState;
+            $('m-card').innerHTML = `<div class="fade-up">
+                <div class="text-xs font-extrabold uppercase tracking-wider text-${sys.color}-600 mb-1">${sys.icon} Missão do ${sys.name}</div>
+                <h3 class="text-2xl font-extrabold text-slate-800 mb-3">${m.title}</h3>
+                <p class="text-slate-600 leading-relaxed mb-4">${m.intro}</p>
+                <div class="flex items-center gap-3 bg-${sys.color}-50 border border-${sys.color}-200 rounded-2xl p-3 mb-4">
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl border-4 border-white shadow shrink-0" style="background:${m.traveler.color}">${m.traveler.emoji || ''}</div>
+                    <div><div class="text-xs font-bold text-slate-400 uppercase">Seu viajante</div><div class="font-extrabold text-slate-700">${m.traveler.label}</div></div>
+                </div>
+                <div class="text-sm font-extrabold text-slate-500 mb-2">🗺️ Roteiro da viagem</div>
+                <ol class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-5">${m.stations.map((s, i) => `
+                    <li class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                        <span class="w-6 h-6 rounded-full text-white text-xs font-black flex items-center justify-center shrink-0" style="background:${sys.hex}">${i + 1}</span>${s.name}
+                    </li>`).join('')}
+                </ol>
+                <button id="m-start" class="w-full bg-${sys.color}-500 hover:bg-${sys.color}-600 text-white font-bold py-3 rounded-xl shadow-md transition text-lg">Começar a missão 🚀</button>
+            </div>`;
+            $('m-start').onclick = () => goStation(0);
+        }
+
+        function goStation(k) {
+            mState.idx = k;
+            mState.stationDone = false;
+            const s = curStation();
+            updateMarkers();
+            updateMissionHud();
+            updatePath(k);
+            $('m-card').innerHTML = `<div class="text-center py-12 fade-up">
+                <div class="text-5xl mb-3 animate-bounce">${mState.look.emoji || '🧭'}</div>
+                <div class="font-extrabold text-slate-600 text-lg">A caminho: ${s.name}...</div>
+            </div>`;
+            moveTokenThrough([...(s.via || []), s.pos], () => renderStation(k));
+        }
+
+        function stationVisual(s) {
+            return s.img
+                ? `<img src="${s.img}" alt="${s.name}" class="max-w-full max-h-full object-contain">`
+                : `<span class="text-4xl">${s.emoji}</span>`;
+        }
+
+        function renderStation(k) {
+            const s = curStation();
+            const { sys, m } = mState;
+            $('m-card').innerHTML = `<div class="fade-up">
+                <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <span class="text-xs font-extrabold uppercase tracking-wider text-${sys.color}-600">Estação ${k + 1} de ${m.stations.length}</span>
+                    <span id="m-chip" class="text-xs font-bold bg-slate-100 text-slate-600 rounded-full px-2.5 py-1">${lookChip()}</span>
+                </div>
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-16 h-16 rounded-2xl bg-${sys.color}-100 flex items-center justify-center shrink-0 p-1.5">${stationVisual(s)}</div>
+                    <h3 class="text-xl md:text-2xl font-extrabold text-slate-800 leading-tight">${s.name}</h3>
+                </div>
+                <div class="space-y-2 text-slate-600 text-sm md:text-[0.95rem] leading-relaxed">${s.text.map(p => `<p>${p}</p>`).join('')}</div>
+                <div id="m-task" class="mt-4"></div>
+                <div id="m-after" class="mt-4"></div>
+            </div>`;
+            mState.taskIdx = 0;
+            renderTask();
+            if (window.innerWidth < 768) $('m-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderTask() {
+            const s = curStation();
+            const t = s.tasks[mState.taskIdx];
+            const c = mState.sys.color;
+            const label = s.tasks.length > 1 ? `🎯 Tarefa ${mState.taskIdx + 1} de ${s.tasks.length}` : '🎯 Sua missão';
+            $('m-task').innerHTML = `<div class="m-task-box border-${c}-200 bg-${c}-50 fade-up">
+                <div class="text-xs font-extrabold uppercase tracking-wider text-${c}-600 mb-1">${label}</div>
+                <div class="font-bold text-slate-700 mb-3">${t.prompt}</div>
+                <div id="t-body"></div>
+                <div id="t-feedback" class="m-feedback"></div>
+            </div>`;
+            TASKS[t.type](t, $('t-body'));
+        }
+
+        function taskFeedback(msg, kind) {
+            const f = $('t-feedback');
+            if (!f) return;
+            f.innerHTML = msg;
+            f.className = 'm-feedback ' + kind;
+        }
+        function taskError(msg) {
+            mState.errors++;
+            updateMissionHud();
+            Sound.play('bad');
+            taskFeedback('✗ ' + msg, 'bad');
+        }
+        function taskDone() {
+            const s = curStation();
+            mState.taskIdx++;
+            if (mState.taskIdx < s.tasks.length) setTimeout(renderTask, 1900);
+            else setTimeout(stationComplete, 900);
+        }
+
+        // --- Tipos de tarefa ---
+        const TASKS = {
+            // Escolher as ações certas (uma ou várias)
+            actions(t, body) {
+                const need = t.actions.filter(a => a.correct).length;
+                let found = 0;
+                body.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>` +
+                    (need > 1 ? `<div class="text-xs font-bold text-slate-400 mt-2">Encontradas: <span id="t-count">0</span>/${need}</div>` : '');
+                const grid = body.firstElementChild;
+                shuffle(t.actions).forEach(a => {
+                    const b = document.createElement('button');
+                    b.className = 'm-act';
+                    b.innerHTML = (a.swatch ? `<span class="swatch" style="background:${a.swatch}"></span>` : `<span class="ic">${a.icon}</span>`) + `<span>${a.label}</span>`;
+                    b.onclick = () => {
+                        if (b.disabled) return;
+                        if (a.correct) {
+                            b.disabled = true;
+                            b.classList.add('ok');
+                            found++;
+                            if ($('t-count')) $('t-count').textContent = found;
+                            taskFeedback('✓ ' + a.msg, 'good');
+                            Sound.play('ok');
+                            bumpToken();
+                            if (found === need) {
+                                grid.querySelectorAll('.m-act').forEach(x => x.disabled = true);
+                                taskDone();
+                            }
+                        } else {
+                            b.classList.add('bad', 'error-shake');
+                            setTimeout(() => b.classList.remove('bad', 'error-shake'), 900);
+                            taskError(a.msg);
+                        }
+                    };
+                    grid.appendChild(b);
+                });
+            },
+
+            // Ligar cada item à resposta certa
+            match(t, body) {
+                const answers = [...new Set(t.pairs.map(p => p.answer))];
+                let solved = 0;
+                body.innerHTML = '<div class="space-y-2"></div>';
+                const rows = body.firstElementChild;
+                t.pairs.forEach(p => {
+                    const row = document.createElement('div');
+                    row.className = 'm-match-row';
+                    row.innerHTML = `<div class="font-extrabold text-slate-700 text-sm mb-1.5">${p.item}</div><div class="flex flex-wrap gap-1.5"></div>`;
+                    const opts = row.lastElementChild;
+                    shuffle(answers).forEach(ans => {
+                        const b = document.createElement('button');
+                        b.className = 'm-opt';
+                        b.textContent = ans;
+                        b.onclick = () => {
+                            if (row.classList.contains('solved')) return;
+                            if (ans === p.answer) {
+                                row.classList.add('solved');
+                                b.classList.add('ok');
+                                b.textContent = '✓ ' + ans;
+                                b.disabled = true;
+                                opts.querySelectorAll('.m-opt').forEach(x => { if (x !== b) x.remove(); });
+                                solved++;
+                                Sound.play('ok');
+                                bumpToken();
+                                taskFeedback('✓ ' + p.msg, 'good');
+                                if (solved === t.pairs.length) taskDone();
+                            } else {
+                                b.classList.add('bad', 'error-shake');
+                                setTimeout(() => b.classList.remove('bad', 'error-shake'), 700);
+                                taskError(`Não é “${ans}”. Dica: ${p.hint}`);
+                            }
+                        };
+                        opts.appendChild(b);
+                    });
+                    rows.appendChild(row);
+                });
+            },
+
+            // Classificar substâncias (néfron)
+            filter(t, body) {
+                const items = shuffle(t.items);
+                let i = 0, lock = false;
+                body.innerHTML = `
+                    <div id="f-prog" class="text-xs font-bold text-slate-400 text-center mb-1"></div>
+                    <div id="f-item" class="f-item"></div>
+                    <div class="grid grid-cols-2 gap-2 mt-3">
+                        <button class="m-act justify-center" data-d="keep">${t.bins.keep}</button>
+                        <button class="m-act justify-center" data-d="out">${t.bins.out}</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-3">
+                        <div class="f-bin"><div class="text-[0.65rem] font-extrabold text-red-500 uppercase mb-1">${t.bins.keep}</div><div id="f-keep"></div></div>
+                        <div class="f-bin"><div class="text-[0.65rem] font-extrabold text-yellow-600 uppercase mb-1">${t.bins.out}</div><div id="f-out"></div></div>
+                    </div>`;
+                const showItem = () => {
+                    const it = items[i];
+                    const el = $('f-item');
+                    el.innerHTML = `<span class="text-3xl">${it.emoji}</span><span>${it.name}</span>`;
+                    el.classList.remove('fade-up'); void el.offsetWidth; el.classList.add('fade-up');
+                    $('f-prog').textContent = `Substância ${i + 1} de ${items.length}`;
+                };
+                body.querySelectorAll('button[data-d]').forEach(b => b.onclick = () => {
+                    if (lock || i >= items.length) return;
+                    const it = items[i];
+                    if (b.dataset.d === it.dest) {
+                        lock = true;
+                        Sound.play('ok');
+                        bumpToken();
+                        taskFeedback('✓ ' + it.msg, 'good');
+                        $(it.dest === 'keep' ? 'f-keep' : 'f-out').insertAdjacentHTML('beforeend', `<span class="f-chip">${it.emoji} ${it.name}</span>`);
+                        i++;
+                        setTimeout(() => {
+                            lock = false;
+                            if (i < items.length) showItem();
+                            else {
+                                $('f-item').innerHTML = '✅ Filtragem concluída!';
+                                $('f-prog').textContent = '';
+                                body.querySelectorAll('button[data-d]').forEach(x => x.disabled = true);
+                                taskDone();
+                            }
+                        }, 1200);
+                    } else {
+                        b.classList.add('bad', 'error-shake');
+                        setTimeout(() => b.classList.remove('bad', 'error-shake'), 700);
+                        taskError(it.msg + ' Tente de novo!');
+                    }
+                });
+                showItem();
+            },
+
+            // Simulação do diafragma: segurar = inspirar, soltar = expirar
+            breath(t, body) {
+                let cycles = 0, holdStart = 0, holding = false, finished = false;
+                body.innerHTML = `
+                    <div id="br-scene" class="breath-scene">
+                        <div id="br-air" class="br-air">Pronto para respirar</div>
+                        <img src="8.png" class="br-lungs" alt="Pulmões">
+                        <svg class="br-diaphragm" viewBox="0 0 200 40" preserveAspectRatio="none"><path d="M4 38 Q100 -14 196 38" fill="none" stroke="#be123c" stroke-width="7" stroke-linecap="round"/></svg>
+                        <div class="br-tag">diafragma</div>
+                    </div>
+                    <button id="br-btn" class="br-btn w-full mt-3 bg-sky-500 hover:bg-sky-600 text-white font-extrabold py-4 rounded-xl shadow-md transition text-lg">🫁 Segure para inspirar</button>
+                    <div id="br-dots" class="flex justify-center gap-2 mt-3">${Array.from({ length: t.cycles }, () => '<span class="w-4 h-4 rounded-full bg-slate-200"></span>').join('')}</div>`;
+                const scene = $('br-scene'), btn = $('br-btn'), air = $('br-air');
+                const bodyLungs = document.querySelector('#m-body .placed-organ[data-id="pulmoes"]');
+                const down = e => {
+                    e.preventDefault();
+                    if (finished || holding) return;
+                    holding = true;
+                    holdStart = performance.now();
+                    scene.classList.add('inhale');
+                    btn.classList.add('holding');
+                    if (bodyLungs) bodyLungs.classList.add('inhale-body');
+                    air.textContent = '⬇️ Inspiração: o diafragma contrai e desce — o ar entra';
+                    btn.textContent = 'Segurando... solte para expirar';
+                };
+                const up = () => {
+                    if (!holding) return;
+                    holding = false;
+                    scene.classList.remove('inhale');
+                    btn.classList.remove('holding');
+                    if (bodyLungs) bodyLungs.classList.remove('inhale-body');
+                    const held = performance.now() - holdStart;
+                    if (held < 1000) {
+                        air.textContent = 'Rápido demais! Inspire devagar';
+                        taskFeedback('Segure por pelo menos 1 segundo: os pulmões precisam de tempo para se encher.', 'info');
+                        btn.textContent = '🫁 Segure para inspirar';
+                        return;
+                    }
+                    cycles++;
+                    $('br-dots').children[cycles - 1].className = 'w-4 h-4 rounded-full bg-sky-500';
+                    air.textContent = '⬆️ Expiração: o diafragma relaxa e sobe — o ar sai com CO₂';
+                    Sound.play('pop');
+                    bumpToken();
+                    taskFeedback(`✓ Respiração ${cycles} de ${t.cycles} completa!`, 'good');
+                    if (cycles >= t.cycles) {
+                        finished = true;
+                        btn.disabled = true;
+                        btn.textContent = '✅ Respirações completas!';
+                        taskDone();
+                    } else btn.textContent = '🫁 Segure para inspirar';
+                };
+                btn.addEventListener('pointerdown', down);
+                btn.addEventListener('pointerup', up);
+                btn.addEventListener('pointerleave', up);
+                btn.addEventListener('pointercancel', up);
+                btn.addEventListener('contextmenu', e => e.preventDefault());
+                btn.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) down(e); });
+                btn.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') up(); });
+            },
+
+            // Fazer o coração bater
+            pump(t, body) {
+                let beats = 0;
+                const times = [];
+                body.innerHTML = `
+                    <button id="pump-heart" class="pump-heart" aria-label="Fazer o coração bater"><img src="9.png" alt="Coração"></button>
+                    <div class="text-center mt-2 font-bold text-slate-600 text-sm">Batimentos: <b id="pump-count" class="text-red-600">0</b>/${t.beats} · Ritmo: <b id="pump-bpm" class="text-red-600">–</b></div>
+                    <div class="trk-bar mt-2"><div id="pump-bar" class="trk-fill" style="width:0%;background:#ef4444"></div></div>`;
+                const heart = $('pump-heart');
+                const bodyHeart = document.querySelector('#m-body .placed-organ[data-id="coracao"] img');
+                heart.onclick = () => {
+                    if (beats >= t.beats) return;
+                    beats++;
+                    times.push(performance.now());
+                    heart.classList.remove('beat'); void heart.offsetWidth; heart.classList.add('beat');
+                    if (bodyHeart) bodyHeart.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)' }, { transform: 'scale(1)' }], { duration: 350 });
+                    Sound.play('beat');
+                    bumpToken();
+                    spawnDrop(heart);
+                    $('pump-count').textContent = beats;
+                    $('pump-bar').style.width = (beats / t.beats * 100) + '%';
+                    let bpm = null;
+                    if (times.length >= 2) {
+                        const iv = [];
+                        for (let i = 1; i < times.length; i++) iv.push(times[i] - times[i - 1]);
+                        const recent = iv.slice(-4);
+                        bpm = Math.min(220, Math.round(60000 / (recent.reduce((a, b) => a + b, 0) / recent.length)));
+                        $('pump-bpm').textContent = bpm >= 220 ? '220+ bpm' : bpm + ' bpm';
+                    }
+                    if (beats >= t.beats) {
+                        heart.disabled = true;
+                        let c;
+                        if (bpm < 60) c = 'bem lento, como o coração de alguém em sono profundo';
+                        else if (bpm <= 110) c = 'parecido com o coração de uma criança em repouso!';
+                        else if (bpm <= 160) c = 'acelerado, como durante uma corrida ou brincadeira';
+                        else c = 'rapidíssimo! Nem depois de muito exercício o coração costuma bater tanto';
+                        taskFeedback(`✓ Sangue bombeado para a artéria pulmonar! Seu ritmo foi de ${bpm} batimentos por minuto: ${c}`, 'good');
+                        taskDone();
+                    }
+                };
+            }
+        };
+
+        function spawnDrop(heart) {
+            const d = document.createElement('div');
+            d.className = 'pump-drop';
+            d.style.background = '#3b82f6';
+            d.style.left = '50%';
+            d.style.top = '25%';
+            heart.appendChild(d);
+            d.animate([
+                { transform: 'translate(-50%, 0) scale(1)', opacity: 1 },
+                { transform: `translate(${rand(-45, 35)}px, -90px) scale(.5)`, opacity: 0 }
+            ], { duration: 800, easing: 'ease-out' });
+            setTimeout(() => d.remove(), 800);
+        }
+
+        function stationComplete() {
+            const s = curStation();
+            const { sys, m } = mState;
+            mState.stationDone = true;
+            if (s.after) {
+                if (s.after.token) { mState.look = { emoji: '', ...s.after.token }; applyLook(); }
+                if (s.after.tracker) { Object.assign(mState.tracker, s.after.tracker); renderTracker(); }
+            }
+            const newTerms = [];
+            (s.glossary || []).forEach(([term, def]) => {
+                if (!stats.glossary.has(term)) newTerms.push(term);
+                stats.glossary.set(term, { def, sys: sys.id });
+            });
+            updateNbCount();
+            updateMarkers();
+            updateMissionHud();
+            Sound.play('done');
+            bumpToken();
+
+            const last = mState.idx === m.stations.length - 1;
+            $('m-after').innerHTML = `<div class="fade-up">
+                <div class="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900 leading-relaxed"><b>💡 Você sabia?</b> ${s.fact}</div>
+                ${newTerms.length ? `<div class="mt-3 text-xs font-bold text-slate-500">📒 Novos termos no Caderno: ${newTerms.map(t => `<span class="inline-block bg-${sys.color}-100 text-${sys.color}-700 rounded-full px-2 py-0.5 m-0.5">${t}</span>`).join('')}</div>` : ''}
+                <button id="m-next" class="w-full mt-4 bg-${sys.color}-500 hover:bg-${sys.color}-600 text-white font-bold py-3 rounded-xl shadow-md transition text-lg">${last ? 'Concluir a missão 🏁' : 'Seguir viagem →'}</button>
+            </div>`;
+            $('m-next').onclick = () => last ? finishMission() : goStation(mState.idx + 1);
+            $('m-next').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function finishMission() {
+            const { sys, m } = mState;
+            $('m-card').innerHTML = `<div class="text-center py-12 fade-up"><div class="text-5xl mb-3 animate-bounce">${mState.look.emoji || '🏁'}</div><div class="font-extrabold text-slate-600 text-lg">Fim do caminho...</div></div>`;
+            moveTokenThrough(m.end, () => {
+                const e = mState.errors;
+                const stars = e === 0 ? 3 : (e <= 3 ? 2 : 1);
+                stats.missions[sys.id] = { errors: e, stars };
+                const last = mState.sysIndex === gameData.length - 1;
+                const nextLabel = last ? 'Ir para a Fase 2: Desafio do Conhecimento 🧠' : `Montar o ${gameData[mState.sysIndex + 1].name} →`;
+                $('m-card').innerHTML = `<div class="fade-up">
+                    <div class="text-center">
+                        <div class="text-5xl mb-2">${sys.icon}</div>
+                        <h3 class="text-2xl font-extrabold text-slate-800">Missão cumprida!</h3>
+                        <div class="flex justify-center gap-2 my-2">${[1, 2, 3].map((n, i) => `<span class="q-star ${n <= stars ? 'on' : ''}" style="animation-delay:${i * .15}s">⭐</span>`).join('')}</div>
+                        <p class="text-sm text-slate-500 font-semibold mb-4">${e === 0 ? 'Nenhum erro! Perfeito!' : `${e} erro${e === 1 ? '' : 's'} no caminho — errar também faz parte de aprender.`}</p>
+                    </div>
+                    <p class="text-slate-600 leading-relaxed mb-4">${m.outro}</p>
+                    <div class="rounded-2xl bg-slate-50 border border-slate-100 p-3 mb-4">
+                        <div class="text-xs font-extrabold uppercase text-slate-400 mb-2">🗺️ Resumo da viagem</div>
+                        <ol class="space-y-1.5">${m.stations.map((s, i) => `
+                            <li class="flex gap-2 text-sm text-slate-600"><span class="w-5 h-5 rounded-full text-white text-[0.65rem] font-black flex items-center justify-center shrink-0 mt-0.5" style="background:${sys.hex}">${i + 1}</span><span><b>${s.name}:</b> ${s.summary}</span></li>`).join('')}
+                        </ol>
+                    </div>
+                    <div class="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900 leading-relaxed mb-4"><b>🔗 Conexão:</b> ${m.next}</div>
+                    <button id="m-continue" class="w-full bg-${last ? 'purple' : gameData[mState.sysIndex + 1].color}-500 hover:bg-${last ? 'purple' : gameData[mState.sysIndex + 1].color}-600 text-white font-bold py-3 rounded-xl shadow-md transition text-lg">${nextLabel}</button>
+                </div>`;
+                Sound.play('win');
+                triggerConfetti();
+                $('m-continue').onclick = () => {
+                    if (last) startPhase2();
+                    else {
+                        currentLevel++;
+                        showScreen('game-ui');
+                        loadLevel(currentLevel);
+                    }
+                };
+            });
+        }
+
+        // ============================================================
+        //  EFEITO CONFETE
+        // ============================================================
+        function triggerConfetti() {
+            const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
+            for (let i = 0; i < 90; i++) {
+                const c = document.createElement('div');
+                c.style.cssText = `position:fixed;width:10px;height:10px;top:-10px;left:${Math.random() * 100}vw;z-index:99999;pointer-events:none;border-radius:${Math.random() > .5 ? '50%' : '0'};background:${colors[Math.floor(Math.random() * colors.length)]}`;
+                document.body.appendChild(c);
+                const dur = (Math.random() * 3 + 2) * 1000;
+                c.animate([
+                    { transform: 'translate3d(0,0,0) rotate(0deg)', opacity: 1 },
+                    { transform: `translate3d(${Math.random() * 200 - 100}px, 100vh, 0) rotate(${Math.random() * 720}deg)`, opacity: 0 }
+                ], { duration: dur, easing: 'cubic-bezier(.37,0,.63,1)', fill: 'forwards' });
+                setTimeout(() => c.remove(), dur);
+            }
+        }
+
+        // ============================================================
+        //  CADERNO DE DESCOBERTAS
+        // ============================================================
+        function allTerms(sysId) {
+            return missionsData[sysId].stations.flatMap(s => (s.glossary || []).map(g => g[0]));
+        }
+        function updateNbCount() {
+            $('nb-count').textContent = stats ? stats.glossary.size : 0;
+        }
+        function openNotebook() {
+            const total = gameData.reduce((n, g) => n + allTerms(g.id).length, 0);
+            $('nb-sub').textContent = `${stats.glossary.size} de ${total} termos descobertos — complete as missões para desbloquear todos!`;
+            $('nb-body').innerHTML = gameData.map(g => {
+                const terms = allTerms(g.id);
+                const got = terms.filter(t => stats.glossary.has(t));
+                return `<section>
+                    <h3 class="font-extrabold text-${g.color}-600 mb-2">${g.icon} ${g.name} <span class="text-xs text-slate-400 font-bold">(${got.length}/${terms.length})</span></h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${terms.map(t => stats.glossary.has(t)
+                        ? `<div class="rounded-xl border border-${g.color}-200 bg-${g.color}-50 p-2.5 text-sm"><b class="text-slate-800">${t}</b><div class="text-slate-600 text-xs mt-0.5 leading-snug">${stats.glossary.get(t).def}</div></div>`
+                        : `<div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-400 font-bold">🔒 Termo a descobrir</div>`).join('')}
+                    </div></section>`;
+            }).join('');
+            $('notebook-modal').classList.remove('hidden');
+            $('notebook-modal').classList.add('flex');
+        }
+        function closeNotebook() {
+            $('notebook-modal').classList.add('hidden');
+            $('notebook-modal').classList.remove('flex');
+        }
+        $('notebook-modal').addEventListener('click', e => { if (e.target.id === 'notebook-modal') closeNotebook(); });
+
+        // ============================================================
+        //  FASE 2 — QUIZ
+        // ============================================================
+        let quizIndex = 0, quizScore = 0, quizAnswered = false, quizOrder = [];
+        const quizBody = $('quiz-body');
+        const scoreLabel = n => `${n} acerto${n === 1 ? '' : 's'}`;
+
+        function startPhase2() {
+            quizIndex = 0; quizScore = 0;
+            showScreen('quiz-screen');
+            triggerConfetti();
+            renderQuestion();
+        }
+
+        function updateQuizHud() {
+            $('quiz-progress-label').textContent = `Pergunta ${Math.min(quizIndex + 1, quizData.length)} de ${quizData.length}`;
+            $('quiz-score').textContent = scoreLabel(quizScore);
+            $('quiz-bar').style.width = `${(quizIndex / quizData.length) * 100}%`;
+        }
+
+        function renderQuestion() {
+            quizAnswered = false;
+            updateQuizHud();
+            const q = quizData[quizIndex];
+            quizOrder = shuffle(q.options.map((_, i) => i)); // índice 0 = resposta certa
+            const visual = q.img
+                ? `<img src="${q.img}" alt="${q.organName}" class="max-w-full max-h-full object-contain" style="filter:drop-shadow(0 8px 12px rgba(0,0,0,.18))">`
+                : `<span class="text-7xl">${q.emoji}</span>`;
+            quizBody.innerHTML = `
+                <div class="q-card p-5 md:p-6 w-full text-center fade-up">
+                    <div class="mx-auto mb-3 flex items-center justify-center" style="width:130px;height:130px">${visual}</div>
+                    <div class="inline-block bg-${q.color}-100 text-${q.color}-700 font-extrabold px-3 py-1 rounded-full text-xs md:text-sm mb-3">${q.system} · ${q.organName}</div>
+                    <h2 class="text-lg md:text-2xl font-extrabold text-slate-800 mb-5 max-w-2xl mx-auto leading-snug">${q.question}</h2>
+                    <div id="quiz-options" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto w-full"></div>
+                    <div id="quiz-explain" class="mt-4"></div>
+                </div>`;
+            const letters = ['A', 'B', 'C', 'D'];
+            quizOrder.forEach((optIdx, pos) => {
+                const b = document.createElement('button');
+                b.className = 'q-opt';
+                b.innerHTML = `<span class="mark">${letters[pos]}</span><span>${q.options[optIdx]}</span>`;
+                b.addEventListener('click', () => answerQuestion(optIdx, b));
+                $('quiz-options').appendChild(b);
+            });
+        }
+
+        function answerQuestion(chosen, btn) {
+            if (quizAnswered) return;
+            quizAnswered = true;
+            const q = quizData[quizIndex];
+            const opts = [...document.querySelectorAll('#quiz-options .q-opt')];
+            opts.forEach(o => o.disabled = true);
+            const isRight = chosen === 0;
+            const rightBtn = opts[quizOrder.indexOf(0)];
+            rightBtn.classList.add('correct');
+            rightBtn.querySelector('.mark').textContent = '✓';
+            if (!isRight) {
+                btn.classList.add('incorrect');
+                btn.querySelector('.mark').textContent = '✗';
+                Sound.play('bad');
+            } else {
+                quizScore++;
+                $('quiz-score').textContent = scoreLabel(quizScore);
+                Sound.play('ok');
+            }
+            const isLast = quizIndex >= quizData.length - 1;
+            $('quiz-explain').innerHTML = `
+                <div class="rounded-2xl px-4 py-3 mb-3 text-sm font-semibold ${isRight ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
+                    ${isRight ? '✅ Boa! ' : '💡 '}${q.explain}
+                </div>
+                <button id="quiz-next-btn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-xl shadow-md transition">
+                    ${isLast ? 'Ver resultado 🏁' : 'Próxima pergunta →'}
+                </button>`;
+            $('quiz-next-btn').addEventListener('click', nextQuestion);
+        }
+
+        function nextQuestion() {
+            quizIndex++;
+            if (quizIndex < quizData.length) renderQuestion();
+            else showQuizResults();
+        }
+
+        function showQuizResults() {
+            $('quiz-progress-label').textContent = 'Concluído!';
+            $('quiz-bar').style.width = '100%';
+            stats.quizScore = quizScore;
+            const total = quizData.length;
+            const pct = Math.round((quizScore / total) * 100);
+            const stars = pct >= 85 ? 3 : (pct >= 50 ? 2 : 1);
+            const msg = stars === 3 ? 'Incrível! Você é um verdadeiro Mestre da Anatomia! 🥇'
+                : stars === 2 ? 'Muito bem! Você já sabe bastante sobre o corpo humano. 💪'
+                : 'Bom começo! Consulte o 📒 Caderno de Descobertas e tente outra vez. 📚';
+            quizBody.innerHTML = `
+                <div class="q-card p-8 w-full max-w-md mx-auto text-center fade-up">
+                    <div class="text-6xl mb-3">🏆</div>
+                    <h2 class="text-2xl font-extrabold text-slate-800 mb-1">Fase 2 Concluída!</h2>
+                    <p class="text-slate-500 mb-4">Você acertou <b class="text-purple-600">${quizScore}</b> de <b>${total}</b> perguntas (${pct}%).</p>
+                    <div class="flex justify-center gap-3 mb-5">
+                        ${[1, 2, 3].map((s, i) => `<span class="q-star ${s <= stars ? 'on' : ''}" style="animation-delay:${i * 0.15}s">⭐</span>`).join('')}
+                    </div>
+                    <p class="font-bold text-slate-700 mb-6">${msg}</p>
+                    <div class="flex flex-col gap-3">
+                        <button onclick="startPhase3()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition">Fase 3: Ver o corpo funcionando →</button>
+                        <button onclick="startPhase2()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 px-6 rounded-xl transition">Repetir a Fase 2 🔁</button>
+                    </div>
+                </div>`;
+            Sound.play('win');
+            triggerConfetti();
+        }
+
+        // ============================================================
+        //  FASE 3 — O CORPO EM AÇÃO
+        // ============================================================
+        let activeP3 = -1;
+        let p3Timers = [];
+
+        function startPhase3() {
+            showScreen('phase3-screen');
+            const wrap = $('p3-buttons');
+            wrap.innerHTML = '';
+            bodySystems.forEach((s, i) => {
+                const b = document.createElement('button');
+                b.id = 'sysbtn-' + i;
+                if (s.gameIndex === 'all') b.style.gridColumn = 'span 2';
+                b.innerHTML = `<span class="text-2xl">${s.icon}</span><span>${s.label}</span>`;
+                b.onclick = () => selectP3System(i);
+                wrap.appendChild(b);
+            });
+            $('p3-finish-btn').onclick = startPhase4;
+            selectP3System(0);
+            triggerConfetti();
+        }
+
+        function selectP3System(i) {
+            activeP3 = i;
+            const sys = bodySystems[i];
+            const body = $('p3-body');
+            stopP3Particles();
+            body.innerHTML = '';
+            const groups = sys.gameIndex === 'all' ? gameData : [gameData[sys.gameIndex]];
+            groups.forEach(g => g.organs.forEach(o => {
+                const el = makeOrganEl(o);
+                if (sys.animate.includes(o.id)) el.classList.add(sys.anim || ORGAN_ANIM[o.id]);
+                body.appendChild(el);
+            }));
+            $('p3-caption').innerHTML = `<div class="font-extrabold text-${sys.color}-600 mb-1">${sys.icon} ${sys.title}</div>
+                <div class="text-slate-600 font-semibold leading-snug">${sys.caption}</div>`;
+            bodySystems.forEach((s, j) => {
+                const b = $('sysbtn-' + j);
+                const on = j === activeP3;
+                b.className = `sys-btn bg-${s.color}-100 text-${s.color}-700 border-2 rounded-xl py-3 px-2 font-extrabold text-sm flex flex-col items-center gap-1 ` +
+                    (on ? `border-${s.color}-500 active` : `border-${s.color}-200`);
+            });
+            sys.particles.forEach(p => startP3Particles(p, sys.particles.length > 1 ? 560 : 280));
+        }
+
+        function startP3Particles(type, every) {
+            const cfg = P3_PARTICLES[type];
+            const body = $('p3-body');
+            p3Timers.push(setInterval(() => {
+                const H = body.clientHeight || 540;
+                const d = document.createElement('div');
+                d.className = 'p3-particle';
+                const size = rand(cfg.sMin, cfg.sMax);
+                d.style.width = size + 'px';
+                d.style.height = size + 'px';
+                d.style.background = cfg.colors[Math.floor(Math.random() * cfg.colors.length)];
+                d.style.left = rand(cfg.xMin, cfg.xMax) + '%';
+                d.style.top = cfg.y0 + '%';
+                body.appendChild(d);
+                const dy = (cfg.y1 - cfg.y0) / 100 * H;
+                d.animate([
+                    { transform: 'translate(-50%,-50%) scale(1)', opacity: 0.9 },
+                    { transform: `translate(calc(-50% + ${rand(-8, 8)}px), calc(-50% + ${dy}px)) scale(0.4)`, opacity: 0 }
+                ], { duration: 1900, easing: 'ease-in' });
+                setTimeout(() => d.remove(), 1900);
+            }, every));
+        }
+
+        function stopP3Particles() {
+            p3Timers.forEach(clearInterval);
+            p3Timers = [];
+            document.querySelectorAll('#p3-body .p3-particle').forEach(e => e.remove());
+        }
+
+        // ============================================================
+        //  FASE 4 — JOGO DA MEMÓRIA
+        // ============================================================
+        let memFirst = null, memSecond = null, memLock = false, memMoves = 0, memPairs = 0;
+
+        function startPhase4() {
+            stopP3Particles();
+            showScreen('phase4-screen');
+            memInit();
+        }
+
+        function memInit() {
+            memFirst = null; memSecond = null; memLock = false; memMoves = 0; memPairs = 0;
+            $('mem-moves').textContent = '0';
+            $('mem-pairs').textContent = `0/${MEM_ORGANS.length}`;
+            const board = $('mem-board');
+            board.innerHTML = '';
+            const cards = shuffle(MEM_ORGANS.flatMap(o => [{ ...o, face: 'image' }, { ...o, face: 'name' }]));
+            cards.forEach((c, i) => {
+                const el = document.createElement('div');
+                el.className = 'memory-card relative w-full aspect-square cursor-pointer mem-pop';
+                el.style.animationDelay = `${i * 0.035}s`;
+                el.dataset.key = c.key;
+                const faceHTML = c.face === 'image'
+                    ? `<img src="${c.src}" alt="${c.label}" class="max-h-[80%] max-w-[85%] object-contain" style="filter:drop-shadow(0 4px 6px rgba(0,0,0,.2))">`
+                    : `<span class="text-xs sm:text-sm md:text-lg font-extrabold text-${c.color}-600 text-center leading-tight px-1">${c.label}</span>`;
+                el.innerHTML = `
+                    <div class="card-inner w-full h-full absolute transform-style-3d rounded-xl md:rounded-2xl shadow-sm">
+                        <div class="card-front absolute w-full h-full bg-white rounded-xl md:rounded-2xl border-2 border-slate-100 flex items-center justify-center backface-hidden rotate-y-180 p-1">${faceHTML}</div>
+                        <div class="card-back absolute w-full h-full card-back-pattern rounded-xl md:rounded-2xl border-2 border-indigo-400 border-b-4 flex items-center justify-center backface-hidden">
+                            <span class="text-2xl md:text-4xl text-white/80 font-black" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))">?</span>
+                        </div>
+                    </div>`;
+                el.addEventListener('click', () => memFlip(el));
+                board.appendChild(el);
+            });
+        }
+
+        function memFlip(el) {
+            if (memLock || el === memFirst || el.classList.contains('matched')) return;
+            el.classList.add('flip');
+            Sound.play('pop');
+            if (!memFirst) { memFirst = el; return; }
+            memSecond = el;
+            memMoves++;
+            $('mem-moves').textContent = memMoves;
+            memLock = true;
+            if (memFirst.dataset.key === memSecond.dataset.key) memMatch();
+            else setTimeout(memUnflip, 1000);
+        }
+
+        function memMatch() {
+            memFirst.classList.add('matched');
+            memSecond.classList.add('matched');
+            const o = MEM_ORGANS.find(x => x.key === memFirst.dataset.key);
+            toast(`✅ ${o.fact}`);
+            Sound.play('ok');
+            memPairs++;
+            $('mem-pairs').textContent = `${memPairs}/${MEM_ORGANS.length}`;
+            memFirst = null; memSecond = null; memLock = false;
+            if (memPairs === MEM_ORGANS.length) {
+                stats.memMoves = memMoves;
+                setTimeout(finishGame, 1200);
+            }
+        }
+
+        function memUnflip() {
+            if (memFirst) memFirst.classList.remove('flip');
+            if (memSecond) memSecond.classList.remove('flip');
+            memFirst = null; memSecond = null; memLock = false;
+        }
+
+        // ============================================================
+        //  TELA FINAL
+        // ============================================================
+        function finishGame() {
+            stopP3Particles();
+            const totalTerms = gameData.reduce((n, g) => n + allTerms(g.id).length, 0);
+            const missionRows = gameData.map(g => {
+                const r = stats.missions[g.id] || { stars: 0, errors: 0 };
+                return `<div class="bg-white rounded-2xl border border-${g.color}-200 p-3 text-center">
+                    <div class="text-2xl">${g.icon}</div>
+                    <div class="text-xs font-extrabold text-${g.color}-600">${missionsData[g.id].title}</div>
+                    <div class="text-lg">${'⭐'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}</div>
+                </div>`;
+            }).join('');
+            const f = $('final-screen');
+            f.innerHTML = `
+                <div class="max-w-3xl w-full my-auto">
+                    <div class="text-7xl mb-3">🏆</div>
+                    <h1 class="text-3xl md:text-4xl font-extrabold text-green-700 mb-2">Máquina Humana Completa!</h1>
+                    <p class="text-lg text-slate-600 max-w-xl mx-auto mb-6">Você montou o corpo, fez cada sistema trabalhar, dominou o desafio, viu o corpo em ação e ligou todos os órgãos ao seu nome. Você é um verdadeiro <b>Mestre da Anatomia</b>! 🧠❤️🫁</p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">${missionRows}</div>
+                    <div class="grid grid-cols-3 gap-2 mb-6">
+                        <div class="bg-white rounded-2xl border border-purple-100 p-3"><div class="text-2xl font-black text-purple-600">${stats.quizScore}/${quizData.length}</div><div class="text-xs font-bold text-slate-500">acertos no desafio</div></div>
+                        <div class="bg-white rounded-2xl border border-indigo-100 p-3"><div class="text-2xl font-black text-indigo-600">${stats.memMoves}</div><div class="text-xs font-bold text-slate-500">jogadas na memória</div></div>
+                        <div class="bg-white rounded-2xl border border-amber-100 p-3"><div class="text-2xl font-black text-amber-600">${stats.glossary.size}/${totalTerms}</div><div class="text-xs font-bold text-slate-500">termos no Caderno</div></div>
+                    </div>
+                    <div class="q-card p-5 text-left mb-6">
+                        <h2 class="font-extrabold text-slate-800 mb-3 text-center">🔗 Como os sistemas trabalham juntos</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                            <div class="rounded-xl bg-orange-50 border border-orange-200 p-3"><b class="text-orange-700">🍔 Digestório</b><br>Quebra os alimentos e absorve os <b>nutrientes</b> para o sangue.</div>
+                            <div class="rounded-xl bg-sky-50 border border-sky-200 p-3"><b class="text-sky-700">💨 Respiratório</b><br>Leva o <b>oxigênio</b> ao sangue e elimina o gás carbônico.</div>
+                            <div class="rounded-xl bg-red-50 border border-red-200 p-3"><b class="text-red-700">🩸 Circulatório</b><br><b>Transporta</b> nutrientes e O₂ às células e recolhe os resíduos.</div>
+                            <div class="rounded-xl bg-yellow-50 border border-yellow-200 p-3"><b class="text-yellow-700">💧 Excretor</b><br><b>Filtra o sangue</b> e elimina a ureia na urina.</div>
+                        </div>
+                        <p class="text-sm text-slate-600 mt-3 text-center">Nas células, nutrientes + oxigênio liberam a <b>energia</b> que usamos para viver: é a respiração celular.</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button onclick="openNotebook()" class="bg-white border-2 border-amber-300 text-amber-700 font-bold py-3 px-8 rounded-full shadow transition hover:scale-105">📒 Rever o Caderno</button>
+                        <button onclick="restartAll()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition hover:scale-105">Jogar tudo de novo 🔁</button>
+                    </div>
+                </div>`;
+            showScreen('final-screen');
+            Sound.play('win');
+            triggerConfetti();
+            setTimeout(triggerConfetti, 700);
+        }
+
+        function restartAll() {
+            stopP3Particles();
+            closeNotebook();
+            hideModal();
+            $('p3-body').innerHTML = '';
+            $('m-body').innerHTML = '';
+            startGame();
+        }
+
+        // Início
+        resetStats();
+    </script>
+</body>
+</html>
